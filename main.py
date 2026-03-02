@@ -5,9 +5,6 @@ import torch
 
 from app.config import TTS_PORT
 
-original_load = torch.load
-torch.load = lambda *a, **k: original_load(*a, **{**k, "weights_only": False}) if "weights_only" not in k else original_load(*a, **k)
-
 # Multi-engine compatibility patches
 try:
     from phonemizer.backend.espeak.wrapper import EspeakWrapper

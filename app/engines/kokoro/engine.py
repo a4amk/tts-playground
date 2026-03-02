@@ -1,7 +1,10 @@
+```python
 import os
 import numpy as np
 import logging
 import librosa
+import subprocess
+import asyncio
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from kokoro import KPipeline # Keep this, as KPipeline is used
 from ..interface import TTSPlugin
@@ -83,7 +86,7 @@ class KokoroPyTorchEngine(TTSPlugin):
     def install_dependencies(self):
         # Simplified for now: just log or call pip
         logger.info(f"Installing dependencies for {self.id}...")
-        os.system("pip install kokoro")
+        subprocess.run(["pip", "install", "kokoro"], check=False)
 
     def load(self, variant: Optional[str] = None):
         """Lazy loading is handled within generate_stream via get_pipeline."""

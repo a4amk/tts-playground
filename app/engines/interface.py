@@ -1,5 +1,6 @@
 import numpy as np
 import re
+import threading
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from abc import ABC, abstractmethod
 
@@ -7,6 +8,8 @@ class TTSPlugin(ABC):
     """
     Unified interface for all TTS Engines in the pluggable architecture.
     """
+    def __init__(self):
+        self.lock = threading.Lock()
     
     # --- Metadata & Discovery ---
     @property

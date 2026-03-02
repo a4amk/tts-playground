@@ -3,9 +3,11 @@ import numpy as np
 import asyncio
 import logging
 import librosa
+import subprocess
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from ..interface import TTSPlugin
 from ...config import get_device
+from ...utils import secure_path_join
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +96,7 @@ class GenieEngine(TTSPlugin):
 
     def install_dependencies(self):
         logger.info(f"Installing dependencies for {self.id}...")
-        os.system("pip install genie-tts soxr")
+        subprocess.run(["pip", "install", "genie-tts", "soxr"], check=False)
 
     def load(self, variant: Optional[str] = None):
         if self._initialized:
@@ -119,10 +121,13 @@ class GenieEngine(TTSPlugin):
             
         local_path = None
         for version in ["v2ProPlus", "v2"]:
-            path = os.path.join(self.characters_dir, "CharacterModels", version, name)
-            if os.path.exists(path):
-                local_path = path
-                break
+            try:
+                path = secure_path_join(os.path.join(self.characters_dir, "CharacterModels", version), name)
+                if os.path.exists(path):
+                    local_path = path
+                    break
+            except ValueError:
+                continue
         
         if local_path:
             import json

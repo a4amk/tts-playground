@@ -12,6 +12,7 @@ from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 
 from ..interface import TTSPlugin
 from ...config import get_device, HF_HUB_OFFLINE, ZIPVOICE_USE_ONNX
+from ...utils import secure_path_join
 import onnxruntime as ort
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ class ZipVoiceEngine(TTSPlugin):
         os.makedirs(self.clones_dir, exist_ok=True)
         
         self.prompt_cache = {}
+        self.lock = threading.Lock() # Override base lock if needed, but TTSPlugin has it now
 
     def get_extra_controls(self) -> List[Dict[str, Any]]:
         return []
@@ -214,12 +216,19 @@ class ZipVoiceEngine(TTSPlugin):
 
     def _get_ref_path(self, voice: str) -> str:
         # Check custom
-        potential_path = os.path.join(self.clones_dir, voice if voice.endswith(".wav") else f"{voice}.wav")
-        if os.path.exists(potential_path):
-            return potential_path
+        try:
+            potential_path = secure_path_join(self.clones_dir, voice if voice.endswith(".wav") else f"{voice}.wav")
+            if os.path.exists(potential_path):
+                return potential_path
+        except ValueError:
+            pass # Blocked traversal
             
         # Check internal ref dir
-        return os.path.join(self.ref_dir, voice)
+        try:
+            return secure_path_join(self.ref_dir, voice)
+        except ValueError:
+             # If both fail or are invalid, fallback to a default if available
+             return os.path.join(self.ref_dir, "default.wav")
 
     async def generate_stream(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> AsyncGenerator[np.ndarray, None]:
         self.load(variant=variant)
@@ -238,16 +247,17 @@ class ZipVoiceEngine(TTSPlugin):
             target_rms = 0.1
             
             cache_key = (voice, prompt_text)
-            if cache_key in self.prompt_cache:
-                prompt_features, prompt_rms = self.prompt_cache[cache_key]
-            else:
-                prompt_wav = load_prompt_wav(ref_path, sampling_rate=sampling_rate)
-                prompt_wav = remove_silence(prompt_wav, sampling_rate, only_edge=False, trail_sil=200)
-                prompt_wav, prompt_rms = rms_norm(prompt_wav, target_rms)
-                
-                prompt_features = self.feature_extractor.extract(prompt_wav, sampling_rate=sampling_rate).to(self.device)
-                prompt_features = prompt_features.unsqueeze(0) * feat_scale
-                self.prompt_cache[cache_key] = (prompt_features, prompt_rms)
+            with self.lock:
+                if cache_key in self.prompt_cache:
+                    prompt_features, prompt_rms = self.prompt_cache[cache_key]
+                else:
+                    prompt_wav = load_prompt_wav(ref_path, sampling_rate=sampling_rate)
+                    prompt_wav = remove_silence(prompt_wav, sampling_rate, only_edge=False, trail_sil=200)
+                    prompt_wav, prompt_rms = rms_norm(prompt_wav, target_rms)
+                    
+                    prompt_features = self.feature_extractor.extract(prompt_wav, sampling_rate=sampling_rate).to(self.device)
+                    prompt_features = prompt_features.unsqueeze(0) * feat_scale
+                    self.prompt_cache[cache_key] = (prompt_features, prompt_rms)
             
             pt = add_punctuation(prompt_text)
             prompt_tokens_str = self.tokenizer.texts_to_tokens([pt])[0]

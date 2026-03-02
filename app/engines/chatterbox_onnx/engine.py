@@ -4,11 +4,13 @@ import numpy as np
 import logging
 import librosa
 import onnxruntime
+import subprocess
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from transformers import AutoTokenizer
 from huggingface_hub import hf_hub_download
 from ..interface import TTSPlugin
 from ...config import get_device, HF_HUB_OFFLINE
+from ...utils import secure_path_join
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +141,7 @@ class ChatterboxONNXEngine(TTSPlugin):
 
     def install_dependencies(self):
         logger.info(f"Installing dependencies for {self.id}...")
-        os.system("pip install onnxruntime transformers librosa huggingface_hub")
+        subprocess.run(["pip", "install", "onnxruntime", "transformers", "librosa", "huggingface_hub"], check=False)
 
     def _download_onnx_model(self, name: str, dtype: str = "fp32") -> str:
         filename = f"{name}{'' if dtype == 'fp32' else '_quantized' if dtype == 'q8' else f'_{dtype}'}.onnx"
@@ -190,9 +192,12 @@ class ChatterboxONNXEngine(TTSPlugin):
     def _prepare_audio_values(self, voice: str) -> np.ndarray:
         voice_path = None
         if voice != "default":
-            potential_path = os.path.join(self.clones_dir, f"{voice}.wav")
-            if os.path.exists(potential_path):
-                voice_path = potential_path
+            try:
+                potential_path = secure_path_join(self.clones_dir, f"{voice}.wav")
+                if os.path.exists(potential_path):
+                    voice_path = potential_path
+            except ValueError:
+                pass
                 
         if not voice_path:
             # Fallback to internal default

@@ -4,6 +4,9 @@ import logging
 from typing import Dict, List, Optional, Type
 from .interface import TTSPlugin
 
+import threading
+from .interface import TTSPlugin
+
 logger = logging.getLogger(__name__)
 
 class PluginManager:
@@ -14,6 +17,7 @@ class PluginManager:
         self.engines_dir = engines_dir
         self._plugins: Dict[str, TTSPlugin] = {}
         self._plugin_classes: Dict[str, Type[TTSPlugin]] = {}
+        self._lock = threading.Lock()
         self.discover_plugins()
 
     def discover_plugins(self):
@@ -21,15 +25,16 @@ class PluginManager:
         Scans the engines directory for subdirectories containing a valid plugin.
         Expected structure: app/engines/<name>/engine.py
         """
-        if not os.path.exists(self.engines_dir):
-            logger.error(f"Engines directory not found: {self.engines_dir}")
-            return
+        with self._lock:
+            if not os.path.exists(self.engines_dir):
+                logger.error(f"Engines directory not found: {self.engines_dir}")
+                return
 
-        for entry in os.scandir(self.engines_dir):
-            if entry.is_dir() and not entry.name.startswith("__"):
-                engine_file = os.path.join(entry.path, "engine.py")
-                if os.path.exists(engine_file):
-                    self._load_plugin_from_file(entry.name, engine_file)
+            for entry in os.scandir(self.engines_dir):
+                if entry.is_dir() and not entry.name.startswith("__"):
+                    engine_file = os.path.join(entry.path, "engine.py")
+                    if os.path.exists(engine_file):
+                        self._load_plugin_from_file(entry.name, engine_file)
 
     def _load_plugin_from_file(self, plugin_name: str, file_path: str):
         """

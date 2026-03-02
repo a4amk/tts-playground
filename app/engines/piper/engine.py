@@ -1,6 +1,7 @@
 import os
+import json
+import subprocess
 import numpy as np
-import scipy.signal
 import asyncio
 import logging
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
@@ -93,7 +94,7 @@ class PiperEngine(TTSPlugin):
 
     def install_dependencies(self):
         logger.info(f"Installing dependencies for {self.id}...")
-        os.system("pip install piper-tts")
+        subprocess.run(["pip", "install", "piper-tts"], check=False)
 
     def load(self, variant: Optional[str] = None):
         """Lazy loading is handled per voice in _get_voice_pipeline."""

@@ -1,9 +1,10 @@
 import os
+import torch
+import subprocess
 import numpy as np
 import asyncio
 import scipy.signal
 import logging
-import torch
 import librosa
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from pocket_tts.models.tts_model import TTSModel, _import_model_state
@@ -94,7 +95,7 @@ class PocketTTSEngine(TTSPlugin):
 
     def install_dependencies(self):
         logger.info(f"Installing dependencies for {self.id}...")
-        os.system("pip install pocket-tts torch scipy")
+        subprocess.run(["pip", "install", "pocket-tts", "torch", "scipy"], check=False)
 
     def load(self, variant: Optional[str] = None):
         if self._model is None:
