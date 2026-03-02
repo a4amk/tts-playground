@@ -43,4 +43,5 @@ Wire the generalized backend systems into the frontend cleanly.
 2. Safely delete `app/engines/clones.py`.
 3. Safely delete the global `models_data/` directory. All weights should now be natively managed by their respective plugins (e.g., `app/engines/<plugin>/weights/` or via huggingface cache).
 4. Conduct end-to-end testing of every supported model. Validate Streaming latency (TTFB/RTF metrics) and Batch Synthesis generation.
-5. Update developer documentation on how to build a custom `TTSPlugin`.
+5. **Standardize Test Suite**: Migrate existing logic-heavy test scripts into a formal `tests/` structure using `pytest`.
+6. Update developer documentation on how to build a custom `TTSPlugin`.

@@ -13,7 +13,9 @@
 - [x] **Piper (ONNX)**: Native VITS-based engine with high performance and 22kHz resampling logic.
 - [x] **Roadmap & Planning Documentation**: Track project progress.
 - [x] **Advanced Controls**: Integrated Temp, Top-K, Top-P, Repetition Penalty, Seed.
-- [x] **Smart Model Presets**: UI automatically updates sliders with model-optimized defaults.
+- [x] Smart Model Presets: UI automatically updates sliders with model-optimized defaults.
+- [x] **Repository Cleanup**: Organized test scripts and removed obsolete files.
+- [x] **Git Initialization**: Configured user info, license, and .gitignore.
 
 ## ✅ Phase 3: Advanced Cloning & Local Optimization
 - [x] **Pocket TTS**: Ultra-lightweight emotional TTS.
@@ -29,6 +31,7 @@
 - [ ] **F5-TTS CPU**: Adapt F5-TTS to run in real-time inference on the CPU pipeline.
 
 ## 📱 Phase 5: Cross-Platform Streaming
+- [ ] **Standardized Test Suite**: Implement a robust unit and integration testing framework using `pytest`, ensuring all engines and API endpoints are covered.
 - [ ] **Safari / iOS Streaming Compatibility**: Make real-time WebSocket audio streaming work natively on Safari and iOS devices (handling strict AudioContext constraints and buffer formats).
 
 ## 🏔️ Long-Term Goal

@@ -32,5 +32,6 @@ Use this document to track granular progress throughout the Plug-and-Play archit
 - [ ] Delete `registry.py`
 - [ ] Delete `clones.py`
 - [ ] Safely delete `models_data/` after all weights are decentralized.
+- [ ] **Standardize Test Suite**: Migrate legacy scripts to `pytest`.
 - [ ] Perform final real-time stream stress test.
 - [ ] Update `README.md` to reflect new plugin architecture.
