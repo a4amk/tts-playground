@@ -2,7 +2,7 @@ import json
 import asyncio
 import re
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from ..engines.registry import models
+from ..engines.manager import plugin_manager
 
 ws_router = APIRouter()
 
@@ -39,11 +39,21 @@ async def websocket_stream(websocket: WebSocket):
             if "text" in data and "model" in data and params is None:
                 params = data
                 model_id = params.get("model", "kokoro")
-                engine = models.get(model_id)
+                engine = plugin_manager.get_plugin(model_id)
                 if not engine:
                     await websocket.send_bytes(b'')
                     return
                 
+                # Map extras back to kwargs using engine definitions
+                extra_definitions = engine.get_extra_controls()
+                extra_kwargs = {}
+                for i, ctrl in enumerate(extra_definitions):
+                    key = f"extra_{i}"
+                    if key in params:
+                        # Defensive check: avoid overriding core arguments
+                        if ctrl["id"] not in ["text", "model", "voice", "lang", "speed", "split_choice", "custom_regex", "temp", "top_k", "top_p", "rep_pen", "seed", "cfg", "exaggeration"]:
+                            extra_kwargs[ctrl["id"]] = params[key]
+
                 # Single-pass legacy mode
                 generator = engine.generate_stream(
                     text=params["text"],
@@ -58,7 +68,8 @@ async def websocket_stream(websocket: WebSocket):
                     rep_pen=float(params.get("rep_pen", 1.0)),
                     seed=int(params.get("seed", 0)),
                     cfg=float(params.get("cfg", 0.5)),
-                    exaggeration=float(params.get("exaggeration", 0.5))
+                    exaggeration=float(params.get("exaggeration", 0.5)),
+                    **extra_kwargs
                 )
                 async for chunk in generator:
                     if chunk is not None and len(chunk) > 0:
@@ -81,10 +92,20 @@ async def websocket_stream(websocket: WebSocket):
                 new_text = data.get("value", "")
                 chunks, text_buffer = get_sentence_chunks(new_text, text_buffer)
                 
-                engine = models.get(params.get("model", "kokoro"))
+                engine = plugin_manager.get_plugin(params.get("model", "kokoro"))
                 for sentence in chunks:
                     if not sentence.strip(): continue
                     print(f"Synthesizing sentence: {sentence}")
+                    # Map extras
+                    extra_definitions = engine.get_extra_controls()
+                    extra_kwargs = {}
+                    for i, ctrl in enumerate(extra_definitions):
+                        key = f"extra_{i}"
+                        if key in params:
+                            # Defensive check: avoid overriding core arguments
+                            if ctrl["id"] not in ["text", "model", "voice", "lang", "speed", "split_choice", "custom_regex", "temp", "top_k", "top_p", "rep_pen", "seed", "cfg", "exaggeration"]:
+                                extra_kwargs[ctrl["id"]] = params[key]
+
                     generator = engine.generate_stream(
                         text=sentence,
                         voice=params.get("voice"),
@@ -96,7 +117,8 @@ async def websocket_stream(websocket: WebSocket):
                         rep_pen=float(params.get("rep_pen", 1.0)),
                         seed=int(params.get("seed", 0)),
                         cfg=float(params.get("cfg", 0.5)),
-                        exaggeration=float(params.get("exaggeration", 0.5))
+                        exaggeration=float(params.get("exaggeration", 0.5)),
+                        **extra_kwargs
                     )
                     async for chunk in generator:
                         if chunk is not None and len(chunk) > 0:
@@ -105,8 +127,18 @@ async def websocket_stream(websocket: WebSocket):
             if params and op == "flush":
                 # Finalize any remaining text
                 if text_buffer.strip():
-                    engine = models.get(params.get("model", "kokoro"))
+                    engine = plugin_manager.get_plugin(params.get("model", "kokoro"))
                     print(f"Flushing remaining text: {text_buffer}")
+                    # Map extras
+                    extra_definitions = engine.get_extra_controls()
+                    extra_kwargs = {}
+                    for i, ctrl in enumerate(extra_definitions):
+                        key = f"extra_{i}"
+                        if key in params:
+                            # Defensive check: avoid overriding core arguments
+                            if ctrl["id"] not in ["text", "model", "voice", "lang", "speed", "split_choice", "custom_regex", "temp", "top_k", "top_p", "rep_pen", "seed", "cfg", "exaggeration"]:
+                                extra_kwargs[ctrl["id"]] = params[key]
+
                     generator = engine.generate_stream(
                         text=text_buffer,
                         voice=params.get("voice"),
@@ -118,7 +150,8 @@ async def websocket_stream(websocket: WebSocket):
                         rep_pen=float(params.get("rep_pen", 1.0)),
                         seed=int(params.get("seed", 0)),
                         cfg=float(params.get("cfg", 0.5)),
-                        exaggeration=float(params.get("exaggeration", 0.5))
+                        exaggeration=float(params.get("exaggeration", 0.5)),
+                        **extra_kwargs
                     )
                     async for chunk in generator:
                         if chunk is not None and len(chunk) > 0:

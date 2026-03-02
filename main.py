@@ -3,6 +3,8 @@ from fastapi import FastAPI
 import gradio as gr
 import torch
 
+from app.config import TTS_PORT
+
 original_load = torch.load
 torch.load = lambda *a, **k: original_load(*a, **{**k, "weights_only": False}) if "weights_only" not in k else original_load(*a, **k)
 
@@ -31,4 +33,4 @@ blocks_app = create_blocks()
 app = gr.mount_gradio_app(app, blocks_app, path="/")
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=7860, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=TTS_PORT, reload=False)

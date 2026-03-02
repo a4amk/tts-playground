@@ -61,7 +61,7 @@ function initWebSocketFunctions() {
         }
     };
     
-    window.startWebSocketStream = function(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration) {
+    window.startWebSocketStream = function(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, extras) {
         window.stopWsStream(); 
         
         window.reqStartTime = performance.now();
@@ -93,6 +93,12 @@ function initWebSocketFunctions() {
                 cfg: parseFloat(cfg),
                 exaggeration: parseFloat(exaggeration)
             };
+            // Add extras with indices so backend can map them
+            if (extras && extras.length) {
+                extras.forEach((val, idx) => {
+                    payload["extra_" + idx] = val;
+                });
+            }
             window.currentWs.send(JSON.stringify(payload));
             
             // Immediately send current text and auto-flush it 

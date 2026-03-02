@@ -1,86 +1,98 @@
 import gradio as gr
-from ..engines.registry import models
-from .js_snippets import INJECT_JS
-from ..engines.clones import clones_manager
 import os
+import time
+import logging
+from ..engines.manager import plugin_manager
+from ..config import DEFAULT_TTS_ENGINE
+from .js_snippets import INJECT_JS
 
-def save_clone_action(model_id, name, audio_path, ref_text, base_voice):
+logger = logging.getLogger(__name__)
+
+def save_clone_action(model_id, name, audio_path, ref_text, ref_lang):
     if not name or not audio_path:
         return "Please provide a name and an audio file."
     
     try:
-        if model_id == "zipvoice":
-            if not ref_text or not ref_text.strip():
-                return "Error: ZipVoice requires a reference transcript."
-            return clones_manager.save_zipvoice_clone(name, audio_path, ref_text)
-        elif model_id == "pocket-tts":
-            from ..engines.pocket_tts.model import pocket_tts_model
-            from pocket_tts.models.tts_model import export_model_state
+        engine = plugin_manager.get_plugin(model_id)
+        if not engine:
+            return f"Error: Model {model_id} not found."
             
-            # New high-quality cloning with optional transcript
-            state = pocket_tts_model.create_clone_state(audio_path, ref_text)
-            return clones_manager.save_pocket_tts_clone(name, state, export_model_state)
-        elif model_id == "genie":
-            if not ref_text or not ref_text.strip():
-                return "Error: Genie requires a reference transcript."
-            if not base_voice:
-                return "Error: Genie requires a base voice selected to clone from."
-            return clones_manager.save_genie_clone(name, audio_path, ref_text, base_voice)
-        elif model_id == "chatterbox-turbo-onnx":
-            return clones_manager.save_chatterbox_clone(name, audio_path)
-        else:
-            return f"Cloning not supported for {model_id} yet."
+        engine.save_clone(name, audio_path, ref_text, ref_lang=ref_lang)
+        return f"Successfully saved clone '{name}' (Language: {ref_lang}) for engine '{model_id}'."
+    except NotImplementedError:
+        return f"Cloning not supported for {model_id}."
     except Exception as e:
+        logger.exception("Error saving clone")
         return f"Error saving clone: {str(e)}"
 
 def update_cloning_ui(model_id):
-    if model_id == "zipvoice":
-        return gr.update(value="### Create a New Voice Clone\n*ZipVoice requires both a Reference Audio and exactly matching Reference Text.*\n\n**Recommended Ref. Length**: 5-10 seconds of clear, monotonic speech."), gr.update(visible=True, placeholder="Paste exactly what is spoken in the audio..."), gr.update(visible=True)
-    elif model_id == "pocket-tts":
-        return gr.update(value="### Create a New Voice Clone\n*Pocket-TTS only needs Reference Audio. Reference Text is optional but helps quality.*\n\n**Recommended Ref. Length**: 1-5 seconds. Short, punchy samples work great."), gr.update(visible=True, placeholder="(Optional) Text spoken in audio..."), gr.update(visible=True)
-    elif model_id == "genie":
-        return gr.update(value="### Create a New Voice Clone\n*Genie requires Reference Audio, Reference Text, AND you must select a Base Voice from the dropdown on the right.*\n\n**Recommended Ref. Length**: 10-15 seconds of expressive speech."), gr.update(visible=True, placeholder="Paste exactly what is spoken in the audio..."), gr.update(visible=True)
-    elif model_id == "chatterbox-turbo-onnx":
-        return gr.update(value="### Create a New Voice Clone\n*Chatterbox Turbo only requires Reference Audio.*\n\n**Recommended Ref. Length**: 5-10 seconds of natural, high-quality vocal audio."), gr.update(visible=False), gr.update(visible=True)
-    elif model_id == "neutts":
-        return gr.update(value="### Create a New Voice Clone\n*NeuTTS support is coming soon. Uploading a reference here will store it for the new engine.*\n\n**Recommended Ref. Length**: 10+ seconds for high-fidelity training."), gr.update(visible=False), gr.update(visible=True)
-    else:
-        return gr.update(value="### Create a New Voice Clone\n*Model currently selected does NOT support Voice Cloning.*"), gr.update(visible=False), gr.update(visible=False)
+    engine = plugin_manager.get_plugin(model_id)
+    if not engine:
+        return gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(value="Model not found.")
 
-def update_sliders_for_model(model_id):
-    defaults = {
-        "kokoro": {"temp": 0.2, "top_k": 50, "top_p": 0.95, "rep_pen": 1.0, "cfg": 1.0, "exag": 0.5},
-        "kokoro-onnx": {"temp": 0.2, "top_k": 50, "top_p": 0.95, "rep_pen": 1.0, "cfg": 1.0, "exag": 0.5},
-        "piper": {"temp": 0.66, "top_k": 50, "top_p": 0.8, "rep_pen": 1.0, "cfg": 1.0, "exag": 0.5},
-        "pocket-tts": {"temp": 0.7, "top_k": 50, "top_p": 0.9, "rep_pen": 1.0, "cfg": 1.0, "exag": 0.5},
-        "zipvoice": {"temp": 0.7, "top_k": 50, "top_p": 0.9, "rep_pen": 1.0, "cfg": 1.0, "exag": 0.5},
-        "genie": {"temp": 0.7, "top_k": 50, "top_p": 0.9, "rep_pen": 1.0, "cfg": 1.0, "exag": 0.5},
-        "chatterbox-turbo-onnx": {"temp": 0.8, "top_k": 50, "top_p": 1.0, "rep_pen": 1.2, "cfg": 0.5, "exag": 0.5},
-        "neutts": {"temp": 0.5, "top_k": 50, "top_p": 1.0, "rep_pen": 1.0, "cfg": 1.0, "exag": 0.5},
-    }
-    cfg = defaults.get(model_id, defaults["kokoro"])
+    config = engine.get_cloning_config()
+    if not config.get("requires_cloning", False):
+        return (
+            gr.update(value="### Voice Cloning\n*This model does not support zero-shot cloning.*"),
+            gr.update(visible=False), # Audio input
+            gr.update(visible=False), # Text input
+            gr.update(visible=False), # Lang input
+            gr.update(visible=False)  # Save Button
+        )
+
+    instruction = config.get("instruction", "Upload audio to clone.")
+    req_transcript = config.get("requires_transcript", False)
+    
     return (
-        gr.update(value=cfg["temp"]),
-        gr.update(value=cfg["top_k"]),
-        gr.update(value=cfg["top_p"]),
-        gr.update(value=cfg["rep_pen"]),
-        gr.update(value=cfg["cfg"]),
-        gr.update(value=cfg["exag"])
+        gr.update(value=f"### Create a New Voice Clone\n{instruction}"),
+        gr.update(visible=True), # Audio input
+        gr.update(visible=req_transcript, placeholder="Enter transcript here..." if req_transcript else ""),
+        gr.update(visible=True), # Lang dropdown
+        gr.update(visible=True) # Save button
     )
 
-def tts_batch(text, model_id, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration):
-    import time
+def update_sliders_for_model(model_id):
+    engine = plugin_manager.get_plugin(model_id)
+    if not engine:
+        return [gr.update()] * 6
+    
+    cfg = engine.get_ui_config()
+    # Map common keys, or just use defaults if missing
+    return (
+        gr.update(value=cfg.get("temp", 0.7)),
+        gr.update(value=cfg.get("top_k", 50)),
+        gr.update(value=cfg.get("top_p", 0.9)),
+        gr.update(value=cfg.get("rep_pen", 1.0)),
+        gr.update(value=cfg.get("cfg", 0.5)),
+        gr.update(value=cfg.get("exaggeration", 0.5))
+    )
+
+def tts_batch(text, model_id, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, *extras):
     if not text.strip():
         return None, "No text provided."
-    engine = models.get(model_id)
+        
+    engine = plugin_manager.get_plugin(model_id)
     if not engine:
         return None, f"Model {model_id} not found"
         
+    # Map extras back to kwargs
+    extra_definitions = engine.get_extra_controls()
+    extra_kwargs = {}
+    for i, ctrl in enumerate(extra_definitions):
+        if i < len(extras):
+            # Defensive check: avoid overriding core arguments
+            if ctrl["id"] not in ["text", "model", "voice", "lang", "speed", "split_choice", "custom_regex", "temp", "top_k", "top_p", "rep_pen", "seed", "cfg", "exaggeration"]:
+                extra_kwargs[ctrl["id"]] = extras[i]
+
     try:
         start_time = time.time()
+        # Ensure model is loaded
+        engine.load(**extra_kwargs)
+        
         audio_payload = engine.generate_batch(
             text=text, voice=voice, speed=speed, lang=lang, split_choice=split_choice, custom_regex=custom_regex,
-            temp=temp, top_k=top_k, top_p=top_p, rep_pen=rep_pen, seed=seed, cfg=cfg, exaggeration=exaggeration
+            temp=temp, top_k=top_k, top_p=top_p, rep_pen=rep_pen, seed=seed, cfg=cfg, exaggeration=exaggeration,
+            **extra_kwargs
         )
         if not audio_payload:
             return None, "No output generated."
@@ -93,39 +105,129 @@ def tts_batch(text, model_id, voice, lang, speed, split_choice, custom_regex, te
         status_msg = f"Batch Complete [{model_id}] | Audio Duration: {audio_dur:.2f}s | Gen Time: {gen_time:.2f}s | RTF: {rtf:.3f}"
         return (rate, final_audio), status_msg
     except Exception as e:
+        logger.exception("Batch generation failed")
         return None, f"Error: {e}"
 
 def update_dropdowns(model_id):
-    engine = models.get(model_id)
+    engine = plugin_manager.get_plugin(model_id)
     if engine:
         voices = engine.get_available_voices()
-        langs = getattr(engine, 'get_available_languages', lambda: ["auto"])()
+        langs = engine.get_available_languages()
         
         voice_update = gr.update(choices=voices, value=voices[0] if voices else None)
         lang_update = gr.update(choices=langs, value=langs[0] if langs else "auto")
-        return voice_update, lang_update
-    return gr.update(choices=[], value=None), gr.update(choices=["auto"], value="auto")
+        
+        # Collect extra controls
+        extra = engine.get_extra_controls()
+        # Ensure we return valid updates for up to 5 controls
+        extra_visible = []
+        for i in range(5):
+            if i < len(extra):
+                ctrl = extra[i]
+                choices = ctrl.get("choices")
+                if not choices and ctrl.get("type") == "checkbox":
+                    choices = [True, False]
+                extra_visible.append(gr.update(visible=True, label=ctrl["label"], value=ctrl["default"], choices=choices))
+            else:
+                extra_visible.append(gr.update(visible=False))
+        
+        # Header visibility
+        header_update = gr.update(visible=len(extra) > 0)
+        
+        return [voice_update, lang_update, header_update] + extra_visible
+    
+    return [gr.update(choices=[], value=None), gr.update(choices=["auto"], value="auto"), gr.update(visible=False)] + [gr.update(visible=False)] * 5
+
 CSS = """
-body { font-family: 'Inter', sans-serif; }
-.gradio-container { max-width: 950px !important; margin: auto; }
-.header-row { align-items: center; justify-content: space-between; margin-bottom: 2rem;}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono&display=swap');
+
+:root {
+    --primary-color: #6366f1;
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+}
+
+body { 
+    font-family: 'Inter', sans-serif; 
+    background-color: var(--bg-color) !important;
+}
+
+.gradio-container { 
+    max-width: 1100px !important; 
+    margin: auto;
+    padding: 2rem !important;
+}
+
+.header-row { 
+    align-items: center; 
+    justify-content: space-between; 
+    margin-bottom: 3rem;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 1rem;
+}
+
+.header-row h1 {
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    background: linear-gradient(to right, #818cf8, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+}
+
+#extra-controls-container {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid #334155;
+    margin-top: 1rem;
+}
+
+#ws-status-logs {
+    border: 1px solid #334155 !important;
+    background: #020617 !important;
+    border-radius: 8px !important;
+    box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+}
+
+.gr-button-primary {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important;
+    border: none !important;
+    box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39) !important;
+}
+
+.gr-button-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.23) !important;
+}
+
+.gr-form {
+    border-radius: 12px !important;
+    border: 1px solid #334155 !important;
+}
+
+/* Clutter-free tweaks */
+.gr-box { border-radius: 12px !important; }
+.gr-padded { padding: 1.5rem !important; }
+
 """
 
 def create_blocks():
-    # In Gradio 6.0+, theme and css should ideally be passed to launch(), 
-    # but for Blocks they are still accepted though deprecated. 
-    # Let's keep them here but fix the UnboundLocalError.
+    plugin_manager.discover_plugins()
+    available_models = plugin_manager.get_all_ids()
+    default_model = DEFAULT_TTS_ENGINE if DEFAULT_TTS_ENGINE in available_models else (available_models[0] if available_models else None)
+
     with gr.Blocks(title="TTS Multi-Model Control Center", css=CSS, theme=gr.themes.Base()) as blocks_app:
         blocks_app.load(fn=None, js=INJECT_JS)
         
         with gr.Row(elem_classes="header-row"):
-            gr.Markdown("# 🎧 Universal TTS Generator\n*Extensible Low-Latency Streaming Frontend!*")
+            gr.Markdown("# 🎧 Universal TTS Generator\n*Dynamic Plug-and-Play Architecture*")
                 
         with gr.Row():
             with gr.Column(scale=5):
                 text_input = gr.Textbox(
                     label="Text to Synthesize", lines=12, 
-                    value="The WebSocket approach is the final boss of low-latency streaming! By abstracting the models into a proper engine framework, we can now drop in additional engines like VITS or XTTS while maintaining flawless AudioContext buffer management!"
+                    value="The new plugin architecture is live! Engines are now self-contained and discovered automatically at runtime. No more hardcoded registries!"
                 )
                 with gr.Accordion("Chunking Rules (Regex Patterns)", open=True):
                     split_choice_input = gr.Dropdown(
@@ -147,34 +249,38 @@ def create_blocks():
                 with gr.Accordion("Voice Cloning & Management", open=False):
                     clone_desc = gr.Markdown("### Create a New Voice Clone\n*Select a model capable of cloning to see instructions.*")
                     clone_name_input = gr.Textbox(label="Clone Name (e.g. MyVoice1)")
-                    clone_audio_input = gr.Audio(label="Reference Audio (WAV)", type="filepath")
-                    clone_text_input = gr.Textbox(label="Reference Text (ZipVoice & Genie ONLY)", lines=3, visible=True)
-                    save_clone_btn = gr.Button("💾 Save Voice Clone", variant="secondary")
+                    clone_audio_input = gr.Audio(label="Reference Audio", type="filepath", visible=False)
+                    clone_text_input = gr.Textbox(label="Reference Text / Transcript", lines=3, visible=False)
+                    clone_lang_input = gr.Dropdown(choices=["English", "Chinese", "Japanese", "Korean", "Spanish", "French", "German"], value="English", label="Reference Language (The language of the file you just uploaded)", visible=False)
+                    save_clone_btn = gr.Button("💾 Save Voice Clone", variant="secondary", visible=False)
                     clone_status = gr.Textbox(label="Cloning Status", interactive=False)
-                
-
                 
             with gr.Column(scale=4):
                 with gr.Group():
-                    model_dropdown = gr.Dropdown(choices=list(models.keys()), value="kokoro", label="TTS Engine", interactive=True)
+                    model_dropdown = gr.Dropdown(choices=available_models, value=default_model, label="TTS Engine", interactive=True)
                     voice_dropdown = gr.Dropdown(choices=[], value=None, label="Voice Configuration", interactive=True)
-                    lang_dropdown = gr.Dropdown(choices=["en", "auto"], value="en", label="Language Config", interactive=True)
+                    lang_dropdown = gr.Dropdown(choices=["auto"], value="auto", label="Language Config", interactive=True)
                     speed_slider = gr.Slider(minimum=0.5, maximum=2.0, value=1.0, step=0.1, label="Relative Playback Speed")
                     
+                    with gr.Group(elem_id="extra-controls-container"):
+                        extra_header = gr.Markdown("### Engine Specific Settings", visible=False)
+                        extra_ctrls = []
+                        for i in range(5):
+                            extra_ctrls.append(gr.Dropdown(visible=False, label=f"Extra {i}"))
+
                 with gr.Accordion("Advanced Synthesis Controls", open=False):
                     temp_slider = gr.Slider(minimum=0.0, maximum=2.0, value=0.7, step=0.1, label="Temperature (Randomness)")
                     top_k_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="Top K")
                     top_p_slider = gr.Slider(minimum=0.1, maximum=1.0, value=0.9, step=0.05, label="Top P")
                     rep_pen_slider = gr.Slider(minimum=1.0, maximum=2.0, value=1.0, step=0.05, label="Repetition Penalty")
-                    cfg_slider = gr.Slider(minimum=0.0, maximum=5.0, value=0.5, step=0.1, label="CFG (Classifier-Free Guidance) Weight", info="Primarily used for Chat/Diffusion")
-                    exag_slider = gr.Slider(minimum=0.0, maximum=2.0, value=0.5, step=0.1, label="Exaggeration / Emotion Control", info="0 = Flat, 0.5 = Neutral, 1.0+ = Extreme")
+                    cfg_slider = gr.Slider(minimum=0.0, maximum=5.0, value=0.5, step=0.1, label="CFG (Classifier-Free Guidance) Weight")
+                    exag_slider = gr.Slider(minimum=0.0, maximum=2.0, value=0.5, step=0.1, label="Exaggeration / Emotion Control")
                     seed_input = gr.Number(value=0, label="Seed (0 for random)", precision=0)
                     
-                # Show/Hide Ref Text based on Model (ZipVoice and Pocket-TTS both can use it now)
                 model_dropdown.change(
                     fn=update_cloning_ui,
                     inputs=model_dropdown,
-                    outputs=[clone_desc, clone_text_input, clone_audio_input]
+                    outputs=[clone_desc, clone_audio_input, clone_text_input, clone_lang_input, save_clone_btn]
                 )
                 
                 model_dropdown.change(
@@ -183,14 +289,12 @@ def create_blocks():
                     outputs=[temp_slider, top_k_slider, top_p_slider, rep_pen_slider, cfg_slider, exag_slider]
                 )
                     
-                # Populate voices initially
-                blocks_app.load(fn=update_dropdowns, inputs=model_dropdown, outputs=[voice_dropdown, lang_dropdown])
-                # Change voices when model changes
-                model_dropdown.change(fn=update_dropdowns, inputs=model_dropdown, outputs=[voice_dropdown, lang_dropdown])
+                blocks_app.load(fn=update_dropdowns, inputs=model_dropdown, outputs=[voice_dropdown, lang_dropdown, extra_header] + extra_ctrls)
+                model_dropdown.change(fn=update_dropdowns, inputs=model_dropdown, outputs=[voice_dropdown, lang_dropdown, extra_header] + extra_ctrls)
 
                 with gr.Tabs():
                     with gr.Tab("JavaScript WebSocket Stream ⚡"):
-                        gr.Markdown("Real-time incremental text-to-speech! As you type (or as an LLM appends), text is buffered and synthesized sentence-by-sentence. Click 'Finish/Flush' to synthesize the last incomplete part.")
+                        gr.Markdown("Real-time incremental text-to-speech!")
                         with gr.Row():
                             ws_stream_btn = gr.Button("▶️ Start Live Stream", variant="primary")
                             ws_flush_btn = gr.Button("💨 Finish/Flush", variant="secondary")
@@ -202,7 +306,6 @@ def create_blocks():
                         batch_output = gr.Audio(label="Merged Output Response", interactive=False)
                 status_text = gr.Textbox(label="Batch Mode Status", interactive=False)
                 
-        # Incremental feeding!
         text_input.change(
             fn=None,
             inputs=[text_input],
@@ -211,25 +314,25 @@ def create_blocks():
 
         ws_stream_btn.click(
             fn=None, 
-            inputs=[text_input, model_dropdown, voice_dropdown, lang_dropdown, speed_slider, split_choice_input, custom_regex_input, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, seed_input, cfg_slider, exag_slider], 
-            js="(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration) => { window.startWebSocketStream(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration); return []; }"
+            inputs=[text_input, model_dropdown, voice_dropdown, lang_dropdown, speed_slider, split_choice_input, custom_regex_input, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, seed_input, cfg_slider, exag_slider] + extra_ctrls, 
+            js="(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, ...extras) => { window.startWebSocketStream(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, extras); return []; }"
         )
         ws_flush_btn.click(fn=None, js="() => { window.flushWsStream(); return []; }")
         ws_stop_btn.click(fn=None, js="() => { window.stopWsStream(); return []; }")
         batch_btn.click(
             fn=tts_batch, 
-            inputs=[text_input, model_dropdown, voice_dropdown, lang_dropdown, speed_slider, split_choice_input, custom_regex_input, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, seed_input, cfg_slider, exag_slider], 
+            inputs=[text_input, model_dropdown, voice_dropdown, lang_dropdown, speed_slider, split_choice_input, custom_regex_input, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, seed_input, cfg_slider, exag_slider] + extra_ctrls, 
             outputs=[batch_output, status_text]
         )
 
         save_clone_btn.click(
             fn=save_clone_action,
-            inputs=[model_dropdown, clone_name_input, clone_audio_input, clone_text_input, voice_dropdown],
+            inputs=[model_dropdown, clone_name_input, clone_audio_input, clone_text_input, clone_lang_input],
             outputs=[clone_status]
         ).then(
             fn=update_dropdowns,
             inputs=model_dropdown,
-            outputs=[voice_dropdown, lang_dropdown]
+            outputs=[voice_dropdown, lang_dropdown, extra_header] + extra_ctrls
         )
         
     return blocks_app
