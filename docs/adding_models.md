@@ -6,54 +6,49 @@ The **Universal TTS Control Center** is built for developer speed. Adding a new 
 
 Create a folder: `app/engines/my_engine/`.
 
-## Step 2: Implement `model.py` and `runtime.py`
+## Step 2: Implement `engine.py`
 
-### `app/engines/my_engine/model.py`
-```python
-class MyModel:
-    def __init__(self):
-        # Load weights here
-        self.pipeline = "ready"
-    def get_voices(self):
-        return ["v1", "v2"]
+Create `app/engines/my_engine/engine.py`. Your class must inherit from `TTSPlugin` and implement the abstract methods.
 
-my_model = MyModel()
-```
-
-### `app/engines/my_engine/runtime.py`
 ```python
 import numpy as np
-from typing import Generator, Tuple, Optional, List
-from ..base import BaseTTS
-from .model import my_model  # Link back to the loader
+from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
+from ..interface import TTSPlugin
 
-class MyRuntime(BaseTTS):
-    def get_available_voices(self) -> List[str]:
-        return my_model.get_voices()
+class MyEngine(TTSPlugin):
+    def __init__(self):
+        self._id = "mycustom"
+        self._display_name = "My Custom Model"
+        # Load weights or sessions here
+    
+    @property
+    def id(self) -> str: return self._id
+    
+    @property
+    def display_name(self) -> str: return self._display_name
 
-    def generate_stream(self, text: str, voice: str, speed: float, **kwargs) -> Generator[np.ndarray, None, None]:
-        # Perform inference using my_model.pipeline
-        yield chunk
+    def get_standard_controls(self) -> List[Dict[str, Any]]:
+        return [{"id": "speed", "label": "Speed", "default": 1.0}]
 
-    def generate_batch(self, text: str, voice: str, speed: float, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
-        return (24000, final_audio_int16)
+    def get_variants(self) -> List[Dict[str, Any]]:
+        return [{"id": "fp32", "label": "FP32", "default": True}]
 
-my_runtime = MyRuntime()
+    def get_cloning_config(self) -> Dict[str, Any]:
+        return {"requires_cloning": False}
+
+    async def generate_stream(self, text, voice, speed, **kwargs):
+        # Your inference logic here
+        yield audio_chunk_float32
+
+    def generate_batch(self, text, voice, speed, **kwargs):
+        return (24000, audio_int16)
+    
+    # ... implement other abstract methods from interface.py
 ```
 
-## Step 3: Register the Model
+## Step 3: Auto-Discovery
 
-Open `app/engines/registry.py` and add your engine to the `models` dictionary:
-
-```python
-from .kokoro.runtime import kokoro_runtime
-from .my_engine.runtime import my_runtime  # Import your new runtime
-
-models = {
-    "kokoro": kokoro_runtime,
-    "mycustom": my_runtime  # Register it here
-}
-```
+You no longer need to manually register models! The `PluginManager` will automatically find your `MyEngine` class if it's in the `app/engines/` directory. Just restart the server, and it will appear in the UI.
 
 ## Step 4: Add a Setup Script (Recommended)
 

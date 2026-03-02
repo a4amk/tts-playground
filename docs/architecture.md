@@ -27,8 +27,10 @@ Instead of using `<audio src="..."></audio>`, which browser buffers often cache 
 *   We schedule each chunk to play at `audioCtx.currentTime + duration`.
 *   This removes all "popping" or silent gaps between sentences.
 
-### 3. **The Engine Manager (`app/engines/registry.py`)**
-This project uses a **Strategy Pattern**. The Gradio UI and the WebSocket API do not know about **Kokoro-82M** or **Chatterbox**. They only know about the `BaseTTS` interface. This allows us to swap models dynamically based on the `model` ID in the WebSocket payload.
+### 3. The Engine Manager (`app/engines/manager.py`)
+This project uses a **Strategy Pattern** with **Dynamic Discovery**. Instead of a hardcoded registry, the `PluginManager` scans the `app/engines/` directory at startup. 
+*   **Auto-Discovery**: Any folder containing an `engine.py` with a `TTSPlugin` subclass is automatically loaded.
+*   **Decoupling**: The Gradio UI and the WebSocket API interact only with the `TTSPlugin` interface, allowing for seamless addition/removal of models without modifying core logic.
 
 ### 4. **Zero-Shot Voice Cloning Path**
 For models supporting instant cloning (ZipVoice, Genie, Chatterbox), the system implements a `StoredVoicesManager`. 
