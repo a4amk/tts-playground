@@ -43,3 +43,4 @@ custom_voices/
 # OS
 .DS_Store
 Thumbs.db
+server.log

@@ -16,7 +16,7 @@ class PiperEngine(TTSPlugin):
     """
     def __init__(self):
         self._id = "piper"
-        self._display_name = "Piper (VITS)"
+        self._display_name = "Piper (VITS/ONNX)"
         
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
         self.voices_base = os.path.join(project_root, "models_data/piper-onnx")
@@ -30,6 +30,15 @@ class PiperEngine(TTSPlugin):
     def display_name(self) -> str:
         return self._display_name
 
+    def get_standard_controls(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": "speed", "label": "Synthesis Speed",
+                "info": "Adjusts the relative playback rate. Works with streaming and batch generation.",
+                "min": 0.5, "max": 2.0, "step": 0.1, "default": 1.0
+            }
+        ]
+
     def get_ui_config(self) -> Dict[str, Any]:
         return {
             "speed": 1.0,
@@ -37,9 +46,27 @@ class PiperEngine(TTSPlugin):
             "noise_w_scale": 0.8
         }
 
+    def get_extra_controls(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": "noise_scale", "label": "Noise Scale (Variance)",
+                "info": "Controls duration and pitch variance. Recommended: 0.667. Works with stream and batch modes.",
+                "min": 0.1, "max": 2.0, "step": 0.05, "default": 0.667
+            },
+            {
+                "id": "noise_w_scale", "label": "Noise Width Scale",
+                "info": "Controls phoneme duration variance. Recommended: 0.8. Works with stream and batch modes.",
+                "min": 0.1, "max": 2.0, "step": 0.05, "default": 0.8
+            }
+        ]
+
+    def get_variants(self) -> List[Dict[str, Any]]:
+        return [{"id": "onnx", "label": "ONNX (FP32)", "default": True}]
+
     def get_cloning_config(self) -> Dict[str, Any]:
         return {
-            "requires_cloning": False
+            "requires_audio": False,
+            "requires_transcript": False
         }
 
     def get_available_voices(self) -> List[str]:
@@ -68,7 +95,7 @@ class PiperEngine(TTSPlugin):
         logger.info(f"Installing dependencies for {self.id}...")
         os.system("pip install piper-tts")
 
-    def load(self):
+    def load(self, variant: Optional[str] = None):
         """Lazy loading is handled per voice in _get_voice_pipeline."""
         pass
 
@@ -95,7 +122,7 @@ class PiperEngine(TTSPlugin):
             
         return self._loaded_voices[voice_key]
 
-    async def generate_stream(self, text: str, voice: str, speed: float, **kwargs) -> AsyncGenerator[np.ndarray, None]:
+    async def generate_stream(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> AsyncGenerator[np.ndarray, None]:
         ls = 1.0 / speed if speed > 0 else 1.0
         ns = kwargs.get("noise_scale", 0.667)
         nw = kwargs.get("noise_w_scale", 0.8)
@@ -129,7 +156,7 @@ class PiperEngine(TTSPlugin):
                   yield audio_float32.astype(np.float32)
                   await asyncio.sleep(0.001)
 
-    def generate_batch(self, text: str, voice: str, speed: float, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
+    def generate_batch(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
         ls = 1.0 / speed if speed > 0 else 1.0
         ns = kwargs.get("noise_scale", 0.667)
         nw = kwargs.get("noise_w_scale", 0.8)

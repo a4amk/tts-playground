@@ -1,10 +1,13 @@
 import os
-import sys
+import json
 import torch
 import numpy as np
-import asyncio
-import datetime as dt
 import logging
+import time
+import asyncio
+import librosa
+import sys
+import datetime as dt
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 
 from ..interface import TTSPlugin
@@ -43,7 +46,7 @@ class ZipVoiceEngine(TTSPlugin):
     """
     def __init__(self):
         self._id = "zipvoice"
-        self._display_name = "ZipVoice (Distilled)"
+        self._display_name = "ZipVoice (Distilled Flow Matching)"
         
         self.device = get_device("cpu")
         self.model_name = "zipvoice_distill"
@@ -68,9 +71,23 @@ class ZipVoiceEngine(TTSPlugin):
         self.prompt_cache = {}
 
     def get_extra_controls(self) -> List[Dict[str, Any]]:
+        return []
+
+    def get_standard_controls(self) -> List[Dict[str, Any]]:
         return [
-            {"id": "use_onnx", "type": "checkbox", "label": "Use ONNX Acceleration", "default": self.use_onnx},
-            {"id": "quant", "type": "dropdown", "label": "ONNX Quantization", "choices": ["FP32", "INT8"], "default": "FP32"}
+            {
+                "id": "speed",
+                "label": "Playback Speed",
+                "info": "Adjusts the relative tempo of the generated speech. Higher = faster, Lower = slower. Works with both streaming and batch generation.",
+                "min": 0.5, "max": 2.0, "step": 0.1, "default": 1.0
+            }
+        ]
+
+    def get_variants(self) -> List[Dict[str, Any]]:
+        return [
+            {"id": "pytorch", "label": "PyTorch (FP32)", "default": not ZIPVOICE_USE_ONNX},
+            {"id": "onnx_fp32", "label": "ONNX (FP32)", "default": ZIPVOICE_USE_ONNX},
+            {"id": "onnx_int8", "label": "ONNX (INT8)", "default": False}
         ]
 
     @property
@@ -121,19 +138,35 @@ class ZipVoiceEngine(TTSPlugin):
         logger.info(f"Installing dependencies for {self.id}...")
         os.system("pip install vocos soundfile")
 
-    def load(self, **kwargs):
-        quant = kwargs.get("quant", "FP32")
-        
-        # If we already have a model loaded but it's the wrong quantization, we need to reload
+    def load(self, variant: Optional[str] = None):
+        # Determine settings from variant
+        if variant == "pytorch":
+            use_onnx = False
+            quant = "FP32"
+        elif variant == "onnx_int8":
+            use_onnx = True
+            quant = "INT8"
+        elif variant == "onnx_fp32":
+            use_onnx = True
+            quant = "FP32"
+        else:
+            # Fallback to env default
+            use_onnx = ZIPVOICE_USE_ONNX
+            quant = self._current_quant or "FP32"
+
+        # If already loaded with different settings, we should ideally reload
         if (self.model is not None or self.onnx_text_encoder is not None):
-             if self.use_onnx and self._current_quant != quant:
-                 logger.info(f"Reloading ZipVoice ONNX with {quant} quantization...")
+             if (self.use_onnx != use_onnx) or (use_onnx and self._current_quant != quant):
+                 logger.info(f"Reloading ZipVoice with variant={variant} (ONNX={use_onnx}, Quant={quant})...")
                  self.onnx_text_encoder = None
                  self.onnx_fm_decoder = None
+                 self.model = None
+                 self.use_onnx = use_onnx
              else:
                  return
 
-        logger.info(f"loading ZipVoice Engine (ONNX={self.use_onnx})...")
+        self.use_onnx = use_onnx
+        logger.info(f"loading ZipVoice Engine (Variant={variant}, ONNX={self.use_onnx})...")
         kwargs = {"local_files_only": HF_HUB_OFFLINE}
         
         # Common files
@@ -142,7 +175,6 @@ class ZipVoiceEngine(TTSPlugin):
         
         if self.use_onnx:
             # Load ONNX models
-            quant = kwargs.get("quant", "FP32")
             suffix = "" if quant == "FP32" else "_int8"
             
             text_encoder_path = hf_hub_download("k2-fsa/ZipVoice", filename=f"{self.model_name}/text_encoder{suffix}.onnx", **kwargs)
@@ -189,8 +221,8 @@ class ZipVoiceEngine(TTSPlugin):
         # Check internal ref dir
         return os.path.join(self.ref_dir, voice)
 
-    async def generate_stream(self, text: str, voice: str, speed: float, **kwargs) -> AsyncGenerator[np.ndarray, None]:
-        self.load()
+    async def generate_stream(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> AsyncGenerator[np.ndarray, None]:
+        self.load(variant=variant)
         
         ref_path = self._get_ref_path(voice)
         txt_path = os.path.splitext(ref_path)[0] + ".txt"
@@ -234,8 +266,7 @@ class ZipVoiceEngine(TTSPlugin):
                     sub_token_ids = self.tokenizer.tokens_to_token_ids([sub_tokens_str])[0]
                     
                     with torch.inference_mode():
-                        self.use_onnx = kwargs.get("use_onnx", self.use_onnx)
-                        self.load(**kwargs)
+                        self.load(variant=variant)
                         
                         if self.use_onnx:
                             # ONNX path
@@ -302,7 +333,11 @@ class ZipVoiceEngine(TTSPlugin):
                         if prompt_rms < target_rms:
                             wav = wav * prompt_rms / target_rms
                         
-                        yield wav.cpu().numpy().flatten().astype(np.float32)
+                        wav_np = wav.cpu().numpy().flatten().astype(np.float32)
+                        if speed != 1.0:
+                             wav_np = librosa.effects.time_stretch(wav_np, rate=speed)
+                             
+                        yield wav_np
 
         import queue
         import threading
@@ -329,10 +364,10 @@ class ZipVoiceEngine(TTSPlugin):
             if msg_type == "data" and chunk is not None:
                 yield chunk
 
-    def generate_batch(self, text: str, voice: str, speed: float, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
+    def generate_batch(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
         async def _run():
             chunks = []
-            async for chunk in self.generate_stream(text, voice, speed, **kwargs):
+            async for chunk in self.generate_stream(text, voice, speed, variant=variant, **kwargs):
                 if len(chunk) > 0: chunks.append(chunk)
             if chunks:
                 return np.concatenate(chunks)

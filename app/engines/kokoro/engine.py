@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import logging
+import librosa
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from kokoro import KPipeline # Keep this, as KPipeline is used
 from ..interface import TTSPlugin
@@ -37,11 +38,24 @@ class KokoroPyTorchEngine(TTSPlugin):
     def display_name(self) -> str:
         return self._display_name
 
+    def get_standard_controls(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": "speed",
+                "label": "Synthesis Speed",
+                "info": "Controls the reading speed of the model. 1.0 is default. Works with both streaming and batch modes.",
+                "min": 0.5, "max": 2.0, "step": 0.1, "default": 1.0
+            }
+        ]
+
     def get_ui_config(self) -> Dict[str, Any]:
         return {
             "speed": 1.0,
             "lang": "en-us"
         }
+
+    def get_variants(self) -> List[Dict[str, Any]]:
+        return [{"id": "pytorch", "label": "PyTorch (FP32)", "default": True}]
 
     def get_cloning_config(self) -> Dict[str, Any]:
         return {
@@ -71,7 +85,7 @@ class KokoroPyTorchEngine(TTSPlugin):
         logger.info(f"Installing dependencies for {self.id}...")
         os.system("pip install kokoro")
 
-    def load(self):
+    def load(self, variant: Optional[str] = None):
         """Lazy loading is handled within generate_stream via get_pipeline."""
         pass
 
@@ -88,7 +102,7 @@ class KokoroPyTorchEngine(TTSPlugin):
                 raise e
         return self.pipelines[lang_code]
 
-    async def generate_stream(self, text: str, voice: str, speed: float, **kwargs) -> AsyncGenerator[np.ndarray, None]:
+    async def generate_stream(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> AsyncGenerator[np.ndarray, None]:
         # Filter out named arguments if they slipped into kwargs
         kwargs.pop("text", None)
         kwargs.pop("voice", None)
@@ -102,7 +116,7 @@ class KokoroPyTorchEngine(TTSPlugin):
         
         for chunk_text in chunks:
             # KPipeline generator is synchronous
-            generator = pipeline(chunk_text.strip(), voice=voice, speed=speed, split_pattern=None)
+            generator = pipeline(chunk_text.strip(), voice=voice, speed=1.0, split_pattern=None)
             for gs, ps, audio in generator:
                 if hasattr(audio, 'numpy'):
                     chunk = audio.numpy()
@@ -110,15 +124,17 @@ class KokoroPyTorchEngine(TTSPlugin):
                     chunk = audio
                     
                 if chunk is not None and len(chunk) > 0:
+                    if speed != 1.0:
+                        chunk = librosa.effects.time_stretch(chunk, rate=speed)
                     yield chunk
 
-    def generate_batch(self, text: str, voice: str, speed: float, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
+    def generate_batch(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
         if not text.strip():
             return None
             
         async def run_stream():
             chunks = []
-            async for chunk in self.generate_stream(text, voice, speed, **kwargs):
+            async for chunk in self.generate_stream(text, voice, speed, variant=variant, **kwargs):
                  chunks.append(chunk)
             return chunks
 

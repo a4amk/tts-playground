@@ -4,6 +4,7 @@ import asyncio
 import scipy.signal
 import logging
 import torch
+import librosa
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from pocket_tts.models.tts_model import TTSModel, _import_model_state
 from pocket_tts.default_parameters import DEFAULT_VARIANT
@@ -17,7 +18,7 @@ class PocketTTSEngine(TTSPlugin):
     """
     def __init__(self):
         self._id = "pocket_tts"
-        self._display_name = "Pocket-TTS (Kyutai)"
+        self._display_name = "Pocket-TTS (Kyutai/Mimi)"
         
         self._model = None
         self._cached_prompt_states = {}
@@ -37,6 +38,25 @@ class PocketTTSEngine(TTSPlugin):
     def display_name(self) -> str:
         return self._display_name
 
+    def get_standard_controls(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": "speed", "label": "Playback Speed",
+                "info": "Adjusts the relative tempo. Works with stream and batch modes.",
+                "min": 0.5, "max": 2.0, "step": 0.1, "default": 1.0
+            },
+            {
+                "id": "temp", "label": "Sampling temperature",
+                "info": "Controls randomness. High = creative, Low = precise. Recommended: 0.7. Works with stream and batch.",
+                "min": 0.1, "max": 2.0, "step": 0.1, "default": 0.7
+            },
+            {
+                "id": "seed", "label": "Random Seed",
+                "info": "Set to 0 for random results, or a fixed number for reproducibility. Works with stream and batch.",
+                "min": 0, "max": 999999, "step": 1, "default": 0
+            }
+        ]
+
     def get_ui_config(self) -> Dict[str, Any]:
         return {
             "temp": 0.7,
@@ -50,6 +70,9 @@ class PocketTTSEngine(TTSPlugin):
             "requires_transcript": False,
             "instruction": "Upload a short clear audio sample. Mimi will extract acoustic features automatically."
         }
+
+    def get_variants(self) -> List[Dict[str, Any]]:
+        return [{"id": "pytorch", "label": "Mimi (PyTorch FP32)", "default": True}]
 
     def get_available_voices(self) -> List[str]:
         predefined = []
@@ -73,7 +96,7 @@ class PocketTTSEngine(TTSPlugin):
         logger.info(f"Installing dependencies for {self.id}...")
         os.system("pip install pocket-tts torch scipy")
 
-    def load(self):
+    def load(self, variant: Optional[str] = None):
         if self._model is None:
             config_path = self.local_config if os.path.exists(self.local_config) else DEFAULT_VARIANT
             logger.info(f"Loading Pocket-TTS model from {config_path}...")
@@ -105,7 +128,7 @@ class PocketTTSEngine(TTSPlugin):
                  
         return self._cached_prompt_states[voice_key]
 
-    async def generate_stream(self, text: str, voice: str, speed: float, **kwargs) -> AsyncGenerator[np.ndarray, None]:
+    async def generate_stream(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> AsyncGenerator[np.ndarray, None]:
         self.load()
         prompt_state = self._get_prompt_state(voice)
         
@@ -135,7 +158,10 @@ class PocketTTSEngine(TTSPlugin):
             def worker():
                 try:
                     for chunk in self._model.generate_audio_stream(model_state=prompt_state, text_to_generate=chunk_text, copy_state=True):
-                         q.put(("data", chunk.detach().cpu().numpy().flatten()))
+                         audio = chunk.detach().cpu().numpy().flatten().astype(np.float32)
+                         if speed != 1.0:
+                             audio = librosa.effects.time_stretch(audio, rate=speed)
+                         q.put(("data", audio))
                 except Exception as e:
                     q.put(("error", e))
                 finally:
@@ -159,7 +185,7 @@ class PocketTTSEngine(TTSPlugin):
             
             thread.join()
 
-    def generate_batch(self, text: str, voice: str, speed: float, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
+    def generate_batch(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
         self.load()
         prompt_state = self._get_prompt_state(voice)
         source_sr = self._model.config.mimi.sample_rate

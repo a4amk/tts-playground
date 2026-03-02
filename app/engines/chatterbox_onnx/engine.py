@@ -38,7 +38,7 @@ class ChatterboxONNXEngine(TTSPlugin):
     """
     def __init__(self):
         self._id = "chatterbox_onnx"
-        self._display_name = "Chatterbox Turbo (ONNX)"
+        self._display_name = "Chatterbox Turbo (Moshi/ONNX)"
         
         # Sessions
         self.speech_encoder_session = None
@@ -77,9 +77,48 @@ class ChatterboxONNXEngine(TTSPlugin):
             "requires_transcript": False,
             "instruction": "Upload a short (5-10s) clear audio sample of the voice you want to clone."
         }
-    def get_extra_controls(self) -> List[Dict[str, Any]]:
+    def get_standard_controls(self) -> List[Dict[str, Any]]:
         return [
-            {"id": "quant", "type": "dropdown", "label": "Quantization", "choices": ["fp32", "fp16", "q8"], "default": "fp32"}
+            {
+                "id": "speed", "label": "Synthesis Speed",
+                "info": "Adjusts the tempo of the generated speech. Works with streaming and batch generation.",
+                "min": 0.5, "max": 2.0, "step": 0.1, "default": 1.0
+            },
+            {
+                "id": "temp", "label": "Sampling Temperature",
+                "info": "Controls randomness. High = creative/expressive, Low = precise/consistent. Recommended: 0.7. Works with stream and batch.",
+                "min": 0.1, "max": 2.0, "step": 0.1, "default": 0.7
+            },
+            {
+                "id": "top_k", "label": "Top-K Filtering",
+                "info": "Filters lowest probability tokens. Recommended: 50. Works with stream and batch.",
+                "min": 1, "max": 200, "step": 1, "default": 50
+            },
+            {
+                "id": "rep_pen", "label": "Repetition Penalty",
+                "info": "Penalizes repeating the same word/sound. Recommended: 1.2. Works with stream and batch.",
+                "min": 1.0, "max": 2.0, "step": 0.1, "default": 1.2
+            },
+            {
+                "id": "cfg", "label": "CFG Scale",
+                "info": "Classifier-Free Guidance. Higher = stronger adherence to prompt style. Recommended: 0.5. Works with stream and batch.",
+                "min": 0.0, "max": 5.0, "step": 0.1, "default": 0.5
+            },
+            {
+                "id": "exaggeration", "label": "Exaggeration / Emotion",
+                "info": "Controls prosodic intensity and 'character' of the voice. Higher = more animated. Recommended: 0.5. Works with stream and batch.",
+                "min": 0.0, "max": 2.0, "step": 0.1, "default": 0.5
+            }
+        ]
+
+    def get_extra_controls(self) -> List[Dict[str, Any]]:
+        return []
+
+    def get_variants(self) -> List[Dict[str, Any]]:
+        return [
+            {"id": "fp32", "label": "Chatterbox Turbo (ONNX FP32)", "default": True},
+            {"id": "fp16", "label": "Chatterbox Turbo (ONNX FP16) [Broken on CPU]", "default": False},
+            {"id": "q8", "label": "Chatterbox Turbo (ONNX Q8/INT8) [Broken on CPU]", "default": False}
         ]
 
     def get_available_voices(self) -> List[str]:
@@ -111,18 +150,19 @@ class ChatterboxONNXEngine(TTSPlugin):
         hf_hub_download(MODEL_ID, subfolder="onnx", filename=f"{filename}_data", **kwargs)
         return graph
 
-    def load(self, dtype="fp32"):
+    def load(self, variant: Optional[str] = None):
+        dtype = variant or "fp32"
         if self._is_loaded and self._current_dtype == dtype:
              return
         
         if self._is_loaded:
-            logger.info(f"Reloading Chatterbox Turbo ONNX models (new dtype={dtype})...")
+            logger.info(f"Reloading Chatterbox Turbo ONNX models (new variant/dtype={dtype})...")
             self.speech_encoder_session = None
             self.embed_tokens_session = None
             self.language_model_session = None
             self.cond_decoder_session = None
-        
-        logger.info(f"Loading Chatterbox Turbo ONNX models (dtype={dtype})...")
+
+        logger.info(f"Loading Chatterbox Turbo ONNX models (variant={variant}, dtype={dtype})...")
         conditional_decoder_path = self._download_onnx_model("conditional_decoder", dtype=dtype)
         speech_encoder_path = self._download_onnx_model("speech_encoder", dtype=dtype)
         embed_tokens_path = self._download_onnx_model("embed_tokens", dtype=dtype)
@@ -130,6 +170,12 @@ class ChatterboxONNXEngine(TTSPlugin):
 
         opts = onnxruntime.SessionOptions()
         opts.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        
+        try:
+            from onnxruntime_extensions import get_library_path
+            opts.register_custom_ops_library(get_library_path())
+        except (ImportError, Exception) as e:
+            logger.warning(f"Failed to register onnxruntime-extensions: {e}")
         
         providers = ['CPUExecutionProvider']
         self.speech_encoder_session = onnxruntime.InferenceSession(speech_encoder_path, opts, providers=providers)
@@ -159,9 +205,13 @@ class ChatterboxONNXEngine(TTSPlugin):
         audio_values, _ = librosa.load(voice_path, sr=SAMPLE_RATE)
         return audio_values[np.newaxis, :].astype(np.float32)
 
-    async def generate_stream(self, text: str, voice: str, speed: float, **kwargs) -> AsyncGenerator[np.ndarray, None]:
-        dtype = kwargs.get("quant", "fp32")
-        self.load(dtype=dtype)
+    async def generate_stream(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> AsyncGenerator[np.ndarray, None]:
+        # Filter out named arguments if they slipped into kwargs
+        kwargs.pop("text", None)
+        kwargs.pop("voice", None)
+        kwargs.pop("speed", None)
+        
+        self.load(variant=variant)
         split_choice = kwargs.get("split_choice", "Both (Newlines & Sentences)")
         custom_regex = kwargs.get("custom_regex", r'\n+')
         chunks = self.split_text(text, split_choice, custom_regex)
@@ -174,8 +224,8 @@ class ChatterboxONNXEngine(TTSPlugin):
             if audio is not None:
                 yield audio
 
-    def generate_batch(self, text: str, voice: str, speed: float, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
-        self.load()
+    def generate_batch(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
+        self.load(variant=variant)
         split_choice = kwargs.get("split_choice", "Both (Newlines & Sentences)")
         custom_regex = kwargs.get("custom_regex", r'\n+')
         chunks = self.split_text(text, split_choice, custom_regex)

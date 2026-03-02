@@ -46,6 +46,23 @@ class TTSPlugin(ABC):
         """
         return []
 
+    @abstractmethod
+    def get_standard_controls(self) -> List[Dict[str, Any]]:
+        """
+        Returns metadata for standard controls (speed, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration).
+        If a control is not returned, it will be hidden in the UI.
+        Format: [{"id": "temp", "label": "Temperature", "info": "...", "min": 0.1, "max": 2.0, "step": 0.1, "default": 0.7}]
+        """
+        pass
+
+    @abstractmethod
+    def get_variants(self) -> List[Dict[str, Any]]:
+        """
+        Returns a list of model variants (e.g. runtimes, quantization levels).
+        Example: [{"id": "fp32", "label": "FP32", "default": True}, {"id": "int8", "label": "INT8", "default": False}]
+        """
+        pass
+
     # --- Capabilities ---
     @abstractmethod
     def get_available_voices(self) -> List[str]:
@@ -69,18 +86,18 @@ class TTSPlugin(ABC):
         pass
 
     @abstractmethod
-    def load(self):
+    def load(self, variant: Optional[str] = None):
         """Lazy loader for model weights and inference sessions."""
         pass
 
     # --- Synthesis ---
     @abstractmethod
-    async def generate_stream(self, text: str, voice: str, speed: float, **kwargs) -> AsyncGenerator[np.ndarray, None]:
+    async def generate_stream(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> AsyncGenerator[np.ndarray, None]:
         """Yields raw float32 audio chunks."""
         pass
 
     @abstractmethod
-    def generate_batch(self, text: str, voice: str, speed: float, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
+    def generate_batch(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
         """Returns (sample_rate, int16_audio_data) for file downloads."""
         pass
 

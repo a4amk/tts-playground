@@ -61,7 +61,7 @@ function initWebSocketFunctions() {
         }
     };
     
-    window.startWebSocketStream = function(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, extras) {
+    window.startWebSocketStream = function(text, model, voice, lang, variant, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, extras) {
         window.stopWsStream(); 
         
         window.reqStartTime = performance.now();
@@ -80,10 +80,10 @@ function initWebSocketFunctions() {
         window.currentWs.binaryType = "arraybuffer";
         
         window.currentWs.onopen = function() {
-            logMsg('Protocol: [op: start] | Engine: ' + model);
+            logMsg('Protocol: [op: start] | Engine: ' + model + ' | Variant: ' + variant);
             let payload = {
                 op: "start",
-                model: model, voice: voice, lang: lang, speed: parseFloat(speed),
+                model: model, voice: voice, lang: lang, variant: variant, speed: parseFloat(speed),
                 split_choice: split_choice, custom_regex: custom_regex,
                 temp: parseFloat(temp),
                 top_k: parseInt(top_k),

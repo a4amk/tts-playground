@@ -2,6 +2,7 @@ import os
 import numpy as np
 import asyncio
 import logging
+import librosa
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from ..interface import TTSPlugin
 from ...config import get_device
@@ -21,7 +22,7 @@ class GenieEngine(TTSPlugin):
     """
     def __init__(self):
         self._id = "genie"
-        self._display_name = "Genie (High Fidelity GPT-SoVITS)"
+        self._display_name = "Genie (GPT-SoVITS)"
         self._initialized = False
         self.device = get_device("cuda")
         
@@ -39,6 +40,18 @@ class GenieEngine(TTSPlugin):
     def display_name(self) -> str:
         return self._display_name
 
+    def get_standard_controls(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": "speed", "label": "Synthesis Speed",
+                "info": "Adjusts reading pace. Recommended: 1.0. Works with both streaming and batch generation.",
+                "min": 0.5, "max": 2.0, "step": 0.1, "default": 1.0
+            }
+        ]
+
+    def get_extra_controls(self) -> List[Dict[str, Any]]:
+        return []
+
     def get_ui_config(self) -> Dict[str, Any]:
         return {
             "lang": "English"
@@ -50,6 +63,9 @@ class GenieEngine(TTSPlugin):
             "requires_transcript": True,
             "instruction": "Upload a 5-10s clear audio sample AND provide the exact transcript for the sample."
         }
+
+    def get_variants(self) -> List[Dict[str, Any]]:
+        return [{"id": "pytorch", "label": "GPT-SoVITS (PyTorch)", "default": True}]
 
     def get_available_voices(self) -> List[str]:
         if not os.path.exists(self.characters_dir):
@@ -80,7 +96,7 @@ class GenieEngine(TTSPlugin):
         logger.info(f"Installing dependencies for {self.id}...")
         os.system("pip install genie-tts soxr")
 
-    def load(self):
+    def load(self, variant: Optional[str] = None):
         if self._initialized:
             return
         if not self.is_installed():
@@ -144,7 +160,7 @@ class GenieEngine(TTSPlugin):
             
         return False
 
-    async def generate_stream(self, text: str, voice: str, speed: float, **kwargs) -> AsyncGenerator[np.ndarray, None]:
+    async def generate_stream(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> AsyncGenerator[np.ndarray, None]:
         import genie_tts as genie
         
         # Check if it's a clone (metadata stored in a sibling file usually, or just assume format)
@@ -213,21 +229,24 @@ class GenieEngine(TTSPlugin):
             ):
                 if chunk_bytes:
                     audio_int16 = np.frombuffer(chunk_bytes, dtype=np.int16)
-                    audio_float32 = audio_int16.astype(np.float32) / 32767.0
+                    audio_fp32 = audio_int16.astype(np.float32) / 32768.0
+                    
+                    if speed != 1.0:
+                        audio_fp32 = librosa.effects.time_stretch(audio_fp32, rate=speed)
                     
                     try:
                         import soxr
-                        resampled = soxr.resample(audio_float32, 32000, 24000)
+                        resampled = soxr.resample(audio_fp32, 32000, 24000)
                         yield resampled
                     except ImportError:
                         yield audio_float32
         except Exception as e:
             logger.error(f"Genie streaming error: {e}")
 
-    def generate_batch(self, text: str, voice: str, speed: float, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
+    def generate_batch(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
         async def _run():
             chunks = []
-            async for chunk in self.generate_stream(text, voice, speed, **kwargs):
+            async for chunk in self.generate_stream(text, voice, speed, variant=variant, **kwargs):
                 if len(chunk) > 0:
                     chunks.append(chunk)
             if chunks:

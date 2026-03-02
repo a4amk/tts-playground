@@ -51,23 +51,8 @@ def update_cloning_ui(model_id):
         gr.update(visible=True) # Save button
     )
 
-def update_sliders_for_model(model_id):
-    engine = plugin_manager.get_plugin(model_id)
-    if not engine:
-        return [gr.update()] * 6
-    
-    cfg = engine.get_ui_config()
-    # Map common keys, or just use defaults if missing
-    return (
-        gr.update(value=cfg.get("temp", 0.7)),
-        gr.update(value=cfg.get("top_k", 50)),
-        gr.update(value=cfg.get("top_p", 0.9)),
-        gr.update(value=cfg.get("rep_pen", 1.0)),
-        gr.update(value=cfg.get("cfg", 0.5)),
-        gr.update(value=cfg.get("exaggeration", 0.5))
-    )
 
-def tts_batch(text, model_id, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, *extras):
+def tts_batch(text, model_id, voice, lang, variant, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, *extras):
     if not text.strip():
         return None, "No text provided."
         
@@ -81,16 +66,16 @@ def tts_batch(text, model_id, voice, lang, speed, split_choice, custom_regex, te
     for i, ctrl in enumerate(extra_definitions):
         if i < len(extras):
             # Defensive check: avoid overriding core arguments
-            if ctrl["id"] not in ["text", "model", "voice", "lang", "speed", "split_choice", "custom_regex", "temp", "top_k", "top_p", "rep_pen", "seed", "cfg", "exaggeration"]:
+            if ctrl["id"] not in ["text", "model", "voice", "lang", "variant", "speed", "split_choice", "custom_regex", "temp", "top_k", "top_p", "rep_pen", "seed", "cfg", "exaggeration"]:
                 extra_kwargs[ctrl["id"]] = extras[i]
 
     try:
         start_time = time.time()
         # Ensure model is loaded
-        engine.load(**extra_kwargs)
+        engine.load(variant=variant)
         
         audio_payload = engine.generate_batch(
-            text=text, voice=voice, speed=speed, lang=lang, split_choice=split_choice, custom_regex=custom_regex,
+            text=text, voice=voice, speed=speed, lang=lang, variant=variant, split_choice=split_choice, custom_regex=custom_regex,
             temp=temp, top_k=top_k, top_p=top_p, rep_pen=rep_pen, seed=seed, cfg=cfg, exaggeration=exaggeration,
             **extra_kwargs
         )
@@ -127,16 +112,42 @@ def update_dropdowns(model_id):
                 choices = ctrl.get("choices")
                 if not choices and ctrl.get("type") == "checkbox":
                     choices = [True, False]
-                extra_visible.append(gr.update(visible=True, label=ctrl["label"], value=ctrl["default"], choices=choices))
+                extra_visible.append(gr.update(
+                    visible=True, label=ctrl["label"], info=ctrl.get("info"), 
+                    value=ctrl["default"], choices=choices
+                ))
             else:
                 extra_visible.append(gr.update(visible=False))
         
         # Header visibility
         header_update = gr.update(visible=len(extra) > 0)
         
-        return [voice_update, lang_update, header_update] + extra_visible
+        # Variants
+        variants = engine.get_variants()
+        variant_choices = [(v["label"], v["id"]) for v in variants]
+        default_variant_id = next((v["id"] for v in variants if v.get("default")), variant_choices[0][1] if variant_choices else None)
+        variant_update = gr.update(choices=variant_choices, value=default_variant_id, visible=True)
+
+        # Standard Controls
+        std_meta = {m["id"]: m for m in engine.get_standard_controls()}
+        std_ids = ["speed", "temp", "top_k", "top_p", "rep_pen", "cfg", "exaggeration", "seed"]
+        std_updates = []
+        for sid in std_ids:
+            if sid in std_meta:
+                m = std_meta[sid]
+                std_updates.append(gr.update(
+                    visible=True, label=m["label"], info=m.get("info"), 
+                    value=m.get("default"), minimum=m.get("min"), 
+                    maximum=m.get("max"), step=m.get("step")
+                ))
+            else:
+                std_updates.append(gr.update(visible=False))
+
+        return [voice_update, lang_update, variant_update, header_update] + std_updates + extra_visible
     
-    return [gr.update(choices=[], value=None), gr.update(choices=["auto"], value="auto"), gr.update(visible=False)] + [gr.update(visible=False)] * 5
+    # Defaults
+    std_defaults = [gr.update(visible=False)] * 8
+    return [gr.update(choices=[], value=None), gr.update(choices=["auto"], value="auto"), gr.update(visible=True, choices=[], value=None), gr.update(visible=False)] + std_defaults + [gr.update(visible=False)] * 5
 
 CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono&display=swap');
@@ -258,6 +269,7 @@ def create_blocks():
             with gr.Column(scale=4):
                 with gr.Group():
                     model_dropdown = gr.Dropdown(choices=available_models, value=default_model, label="TTS Engine", interactive=True)
+                    variant_dropdown = gr.Dropdown(choices=[], value=None, label="Model Variant (Runtime / Quantization)", interactive=True, visible=True)
                     voice_dropdown = gr.Dropdown(choices=[], value=None, label="Voice Configuration", interactive=True)
                     lang_dropdown = gr.Dropdown(choices=["auto"], value="auto", label="Language Config", interactive=True)
                     speed_slider = gr.Slider(minimum=0.5, maximum=2.0, value=1.0, step=0.1, label="Relative Playback Speed")
@@ -283,14 +295,16 @@ def create_blocks():
                     outputs=[clone_desc, clone_audio_input, clone_text_input, clone_lang_input, save_clone_btn]
                 )
                 
-                model_dropdown.change(
-                    fn=update_sliders_for_model,
-                    inputs=model_dropdown,
-                    outputs=[temp_slider, top_k_slider, top_p_slider, rep_pen_slider, cfg_slider, exag_slider]
+                blocks_app.load(
+                    fn=update_dropdowns, 
+                    inputs=model_dropdown, 
+                    outputs=[voice_dropdown, lang_dropdown, variant_dropdown, extra_header, speed_slider, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, cfg_slider, exag_slider, seed_input] + extra_ctrls
                 )
-                    
-                blocks_app.load(fn=update_dropdowns, inputs=model_dropdown, outputs=[voice_dropdown, lang_dropdown, extra_header] + extra_ctrls)
-                model_dropdown.change(fn=update_dropdowns, inputs=model_dropdown, outputs=[voice_dropdown, lang_dropdown, extra_header] + extra_ctrls)
+                model_dropdown.change(
+                    fn=update_dropdowns, 
+                    inputs=model_dropdown, 
+                    outputs=[voice_dropdown, lang_dropdown, variant_dropdown, extra_header, speed_slider, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, cfg_slider, exag_slider, seed_input] + extra_ctrls
+                )
 
                 with gr.Tabs():
                     with gr.Tab("JavaScript WebSocket Stream ⚡"):
@@ -314,14 +328,14 @@ def create_blocks():
 
         ws_stream_btn.click(
             fn=None, 
-            inputs=[text_input, model_dropdown, voice_dropdown, lang_dropdown, speed_slider, split_choice_input, custom_regex_input, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, seed_input, cfg_slider, exag_slider] + extra_ctrls, 
-            js="(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, ...extras) => { window.startWebSocketStream(text, model, voice, lang, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, extras); return []; }"
+            inputs=[text_input, model_dropdown, voice_dropdown, lang_dropdown, variant_dropdown, speed_slider, split_choice_input, custom_regex_input, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, seed_input, cfg_slider, exag_slider] + extra_ctrls, 
+            js="(text, model, voice, lang, variant, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, ...extras) => { window.startWebSocketStream(text, model, voice, lang, variant, speed, split_choice, custom_regex, temp, top_k, top_p, rep_pen, seed, cfg, exaggeration, extras); return []; }"
         )
         ws_flush_btn.click(fn=None, js="() => { window.flushWsStream(); return []; }")
         ws_stop_btn.click(fn=None, js="() => { window.stopWsStream(); return []; }")
         batch_btn.click(
             fn=tts_batch, 
-            inputs=[text_input, model_dropdown, voice_dropdown, lang_dropdown, speed_slider, split_choice_input, custom_regex_input, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, seed_input, cfg_slider, exag_slider] + extra_ctrls, 
+            inputs=[text_input, model_dropdown, voice_dropdown, lang_dropdown, variant_dropdown, speed_slider, split_choice_input, custom_regex_input, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, seed_input, cfg_slider, exag_slider] + extra_ctrls, 
             outputs=[batch_output, status_text]
         )
 
@@ -332,7 +346,7 @@ def create_blocks():
         ).then(
             fn=update_dropdowns,
             inputs=model_dropdown,
-            outputs=[voice_dropdown, lang_dropdown, extra_header] + extra_ctrls
+            outputs=[voice_dropdown, lang_dropdown, variant_dropdown, extra_header] + extra_ctrls
         )
         
     return blocks_app
