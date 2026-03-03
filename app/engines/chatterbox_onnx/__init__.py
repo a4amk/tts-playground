@@ -1,1 +1,1 @@
-from .runtime import ChatterboxONNXRuntime
+# Auto-discovered plugin
