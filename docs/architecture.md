@@ -39,7 +39,7 @@ For models supporting zero-shot cloning (ZipVoice, Genie, NeuTTS, Chatterbox), t
 *   **Dynamic Injection**: Clones appear instantly in the frontend dropdown without requiring a server restart.
 
 ### 5. **Models Data and Custom Voices**
-*   `models_data/`: Centralized storage for static model weights and predefined assets (Downloaded via `scripts/*.sh`).
+*   `models_data/`: Centralized storage for static model weights. With `LOCALIZE_MODELS=True`, engines automatically fetch missing weights into these project-relative folders, making the app fully portable.
 *   `custom_voices/`: Dynamic storage for user-generated voice clones. Each engine manages its own sub-folder.
 
 ### 6. **Chunking & Regex Strategy**
@@ -48,8 +48,12 @@ TTS models generate audio best when input is split into manageable sentences. We
 *   **Newline-wise streaming**: Faster than sentence-wise, but may result in longer silence if lines are very long.
 *   **One-pass Batching**: High quality, but higher latency.
 
-### 7. **One-Click Maintenance (`scripts/`)**
-The project implements a **Script-per-Engine** pattern. Every model in `app/engines/` should have a corresponding bash script in `scripts/` to automate weights downloading and environment setup. This ensures the playground remains portable.
+### 7. **Unified Management CLI (`tts_playground.sh`)**
+The project provides a single entrypoint for lifecycle management:
+- `./tts_playground.sh --install`: One-click setup of prerequisites and venv.
+- `./tts_playground.sh --start`: Launches the FastAPI + Gradio stack using the correct environment.
+- `./tts_playground.sh --stop`: Ensures all background processes are terminated.
+- `./tts_playground.sh --purge`: Deep cleans models and environment for a fresh start.
 
 ---
 

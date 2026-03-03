@@ -47,6 +47,6 @@ The TTS Playground supports a variety of engines, each with unique strengths. Th
 
 ## Standardized Directories
 
-- **Weights**: All static weights must reside in `models_data/`.
+- **Weights**: Static weights are localized in `models_data/`. With `LOCALIZE_MODELS=True`, engines automatically fetch missing weights into these project-relative folders, making the app fully portable.
 - **Custom Voices**: All dynamically saved clones must reside in `custom_voices/<engine_id>/`.
-- **Logs**: Generation logs are piped to the terminal and `server.log`.
+- **Logs**: Generation logs are piped to the terminal.

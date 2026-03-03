@@ -50,7 +50,12 @@ class MyEngine(TTSPlugin):
 
 ## Step 3: Auto-Discovery
 
-You no longer need to manually register models! The `PluginManager` will automatically find your engine class if it's in the `app/engines/` directory and inherits from `TTSPlugin`. Just restart the server, and it will appear in the UI.
+You no longer need to manually register models! The `PluginManager` will automatically find your engine class if it's in the `app/engines/` directory and inherits from `TTSPlugin`. 
+
+Just start the server via the management script, and it will appear in the UI:
+```bash
+./tts_playground.sh --start
+```
 
 ## Step 4: Add a Setup Script (Recommended)
 
