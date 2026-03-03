@@ -7,6 +7,7 @@ function initWebSocketFunctions() {
     
     // metrics variables
     window.reqStartTime = 0;
+    window.modelReadyTime = 0;
     window.firstChunkTime = 0;
     window.totalAudioSeconds = 0;
     
@@ -65,6 +66,7 @@ function initWebSocketFunctions() {
         window.stopWsStream(); 
         
         window.reqStartTime = performance.now();
+        window.modelReadyTime = 0;
         window.firstChunkTime = 0;
         window.totalAudioSeconds = 0;
         window.lastTextSentIndex = text.length;
@@ -113,6 +115,14 @@ function initWebSocketFunctions() {
         
         let chunkCount = 0;
         window.currentWs.onmessage = async function(event) {
+            if (typeof event.data === 'string') {
+                let data = JSON.parse(event.data);
+                if (data.op === "metadata" && data.event === "model_ready") {
+                    window.modelReadyTime = performance.now();
+                }
+                return;
+            }
+
             if (event.data.byteLength === 0) {
                 // b'' from python backend acts as a ping indicating buffer was flushed successfully
                 let finalRtf = (performance.now() - window.reqStartTime) / 1000 / window.totalAudioSeconds;
@@ -122,7 +132,9 @@ function initWebSocketFunctions() {
             
             if (window.firstChunkTime === 0) {
                 window.firstChunkTime = performance.now();
-                logMsg('<b>[Metric]</b> Time To First Byte (TTFB): ' + (window.firstChunkTime - window.reqStartTime).toFixed(2) + ' ms');
+                let coldStart = (window.firstChunkTime - window.reqStartTime).toFixed(2);
+                let warmStart = window.modelReadyTime > 0 ? (window.firstChunkTime - window.modelReadyTime).toFixed(2) : "N/A";
+                logMsg(`<b>[Metric]</b> TTFA (Cold Start): ${coldStart} ms | TTFA (Warm Start): ${warmStart} ms`);
             }
             
             chunkCount++;

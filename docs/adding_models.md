@@ -104,6 +104,6 @@ Once registered:
 
 ## Pro Tips for Performance
 
-*   **Yielding Chunks**: Try to yield audio as soon as a single sentence or even a single word is ready (if the model supports it). This keeps **TTFB** ultra-low.
+*   **Yielding Chunks**: Try to yield audio as soon as a single sentence or even a single word is ready (if the model supports it). This keeps **TTFA** ultra-low.
 *   **Audio Depth**: Ensure you are yielding **`Float32`** numpy arrays for the `generate_stream` method. The browser's `AudioContext` expects this bit depth.
 *   **Sample Rate**: The current frontend is hardcoded for **24,000Hz**. If your model uses another rate (e.g., 44,100Hz), you may need to upsample/downsample in the `generate` generator or update the frontend's `AudioContext` initialization in `app/ui/js_snippets.py`.

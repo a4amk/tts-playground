@@ -44,6 +44,9 @@ async def websocket_stream(websocket: WebSocket):
                     await websocket.send_bytes(b'')
                     return
                 
+                # Signal that the model is ready (loaded and retrieved)
+                await websocket.send_text(json.dumps({"op": "metadata", "event": "model_ready"}))
+                
                 # Map extras back to kwargs using engine definitions
                 extra_definitions = engine.get_extra_controls()
                 extra_kwargs = {}
@@ -97,6 +100,10 @@ async def websocket_stream(websocket: WebSocket):
                 for sentence in chunks:
                     if not sentence.strip(): continue
                     print(f"Synthesizing sentence: {sentence}")
+                    
+                    # Signal model ready for each prompt in streaming mode
+                    await websocket.send_text(json.dumps({"op": "metadata", "event": "model_ready"}))
+
                     # Map extras
                     extra_definitions = engine.get_extra_controls()
                     extra_kwargs = {}
@@ -131,6 +138,10 @@ async def websocket_stream(websocket: WebSocket):
                 if text_buffer.strip():
                     engine = plugin_manager.get_plugin(params.get("model", "kokoro"))
                     print(f"Flushing remaining text: {text_buffer}")
+
+                    # Signal model ready for flush
+                    await websocket.send_text(json.dumps({"op": "metadata", "event": "model_ready"}))
+
                     # Map extras
                     extra_definitions = engine.get_extra_controls()
                     extra_kwargs = {}

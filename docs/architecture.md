@@ -44,7 +44,7 @@ For models supporting zero-shot cloning (ZipVoice, Genie, NeuTTS, Chatterbox), t
 
 ### 6. **Chunking & Regex Strategy**
 TTS models generate audio best when input is split into manageable sentences. We expose the **`split_pattern`** parameter to the frontend, allowing for:
-*   **Sentence-wise streaming**: Fast TTFB. Audio starts playing as soon as the first sentence is processed.
+- **Sentence-wise streaming**: Fast TTFA. Audio starts playing as soon as the first sentence is processed.
 *   **Newline-wise streaming**: Faster than sentence-wise, but may result in longer silence if lines are very long.
 *   **One-pass Batching**: High quality, but higher latency.
 
