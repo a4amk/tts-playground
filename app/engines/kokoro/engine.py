@@ -1,8 +1,6 @@
-```python
 import os
 import numpy as np
 import logging
-import librosa
 import subprocess
 import asyncio
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
@@ -128,7 +126,7 @@ class KokoroPyTorchEngine(TTSPlugin):
                     
                 if chunk is not None and len(chunk) > 0:
                     if speed != 1.0:
-                        chunk = librosa.effects.time_stretch(chunk, rate=speed)
+                        pass # Skip per-chunk speed stretch to prevent streaming artifacts
                     yield chunk
 
     def generate_batch(self, text: str, voice: str, speed: float, variant: Optional[str] = None, **kwargs) -> Optional[Tuple[int, np.ndarray]]:
@@ -158,6 +156,10 @@ class KokoroPyTorchEngine(TTSPlugin):
             return None
             
         final_audio = np.concatenate(chunks)
+        if speed != 1.0:
+            import librosa
+            final_audio = librosa.effects.time_stretch(final_audio, rate=speed)
+            
         final_audio_int16 = (final_audio * 32767).astype(np.int16)
         return (24000, final_audio_int16)
 

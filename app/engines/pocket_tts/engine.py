@@ -69,7 +69,7 @@ class PocketTTSEngine(TTSPlugin):
         return {
             "requires_cloning": True,
             "requires_transcript": False,
-            "instruction": "Upload a short clear audio sample. Mimi will extract acoustic features automatically."
+            "instruction": "Upload a short clear audio sample. Mimi will extract acoustic features automatically. Use the 'Edit' (scissors) button to trim if the audio exceeds 15s."
         }
 
     def get_variants(self) -> List[Dict[str, Any]]:
@@ -160,8 +160,7 @@ class PocketTTSEngine(TTSPlugin):
                 try:
                     for chunk in self._model.generate_audio_stream(model_state=prompt_state, text_to_generate=chunk_text, copy_state=True):
                          audio = chunk.detach().cpu().numpy().flatten().astype(np.float32)
-                         if speed != 1.0:
-                             audio = librosa.effects.time_stretch(audio, rate=speed)
+                     # skip per-chunk speed stretch to prevent artifacts
                          q.put(("data", audio))
                 except Exception as e:
                     q.put(("error", e))
@@ -191,17 +190,35 @@ class PocketTTSEngine(TTSPlugin):
         prompt_state = self._get_prompt_state(voice)
         source_sr = self._model.config.mimi.sample_rate
         
-        chunks = []
-        for chunk in self._model.generate_audio_stream(model_state=prompt_state, text_to_generate=text):
-             chunks.append(chunk.detach().cpu().numpy().flatten())
+        audio_chunks = []
+        for chunk in self._model.generate_audio_stream(model_state=prompt_state, text_to_generate=text, copy_state=True):
+            chunk_np = chunk.detach().cpu().numpy().flatten().astype(np.float32)
+            # skip per-chunk speed stretch
+            audio_chunks.append(chunk_np)
         
-        if not chunks:
+        if not audio_chunks:
              return None
              
-        full_audio = np.concatenate(chunks)
-        return source_sr, (full_audio * 32767).astype(np.int16)
+        full_audio = np.concatenate(audio_chunks)
+        target_sr = 24000
+        if source_sr != target_sr:
+            num_samples = int(len(full_audio) * target_sr / source_sr)
+            full_audio = scipy.signal.resample(full_audio, num_samples)
+        
+        if speed != 1.0:
+            import librosa
+            full_audio = librosa.effects.time_stretch(full_audio, rate=speed)
+            
+        return target_sr, (full_audio * 32767).astype(np.int16)
 
     def save_clone(self, name: str, audio_path: str, transcript: Optional[str] = None):
+        try:
+            import librosa
+            duration = librosa.get_duration(path=audio_path)
+            if duration > 15.0:
+                raise ValueError(f"Audio is {duration:.1f}s long. Please use the 'Edit' (scissors) button to trim it under 15s.")
+        except ImportError:
+            pass
         self.load()
         target_path = os.path.join(self.clones_dir, f"{name}.safetensors")
         # Extract features

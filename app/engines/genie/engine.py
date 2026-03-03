@@ -63,7 +63,7 @@ class GenieEngine(TTSPlugin):
         return {
             "requires_cloning": True,
             "requires_transcript": True,
-            "instruction": "Upload a 5-10s clear audio sample AND provide the exact transcript for the sample."
+            "instruction": "Upload a 5-10s clear audio sample AND provide the exact transcript for the sample. Use the 'Edit' (scissors) button to trim if the audio exceeds 15s."
         }
 
     def get_variants(self) -> List[Dict[str, Any]]:
@@ -85,7 +85,7 @@ class GenieEngine(TTSPlugin):
         return sorted(list(set(voices + clones)))
 
     def get_available_languages(self) -> List[str]:
-        return ["Japanese", "English", "Chinese", "Korean", "Hybrid-Chinese-English", "auto"]
+        return ["auto", "English", "Japanese", "Chinese"]
 
     def is_installed(self) -> bool:
         try:
@@ -216,14 +216,30 @@ class GenieEngine(TTSPlugin):
         
         # Prepend language tag if provided
         lang = kwargs.get("lang", "auto")
-        tag = ""
-        if lang == "English": tag = "[EN]"
-        elif lang == "Chinese": tag = "[ZH]"
-        elif lang == "Japanese": tag = "[JA]"
-        elif lang == "Korean": tag = "[KO]"
         
-        if tag and not text.startswith("["):
-            text = f"{tag}{text}"
+        if lang == "auto":
+            try:
+                from langdetect import detect
+                detected_lang = detect(text)
+                if detected_lang == "ja": lang = "Japanese"
+                elif detected_lang == "zh-cn" or detected_lang == "zh-tw": lang = "Chinese"
+                else: lang = "English"
+                logger.info(f"Genie auto-detected language: {lang} (code: {detected_lang})")
+            except Exception as e:
+                logger.warning(f"langdetect failed: {e}. Falling back to English.")
+                lang = "English"
+
+        if lang not in ["English", "Japanese", "Chinese"]:
+            lang = "English"
+
+        # Genie TTS requires the language via its ModelManager character registry, not tags
+        try:
+            from genie_tts.Internal import model_manager
+            model_manager.character_to_language[base_voice.lower()] = lang
+        except Exception as e:
+            logger.error(f"Failed to set Genie language via model_manager: {e}")
+            
+        logger.info(f"Genie using language: {lang} for character: {base_voice}")
             
         try:
             async for chunk_bytes in genie.tts_async(
@@ -236,8 +252,9 @@ class GenieEngine(TTSPlugin):
                     audio_int16 = np.frombuffer(chunk_bytes, dtype=np.int16)
                     audio_fp32 = audio_int16.astype(np.float32) / 32768.0
                     
-                    if speed != 1.0:
-                        audio_fp32 = librosa.effects.time_stretch(audio_fp32, rate=speed)
+                    # Removed per-chunk time_stretch to avoid streaming artifacts (clicks/glitches)
+                    # if speed != 1.0:
+                    #     audio_fp32 = librosa.effects.time_stretch(audio_fp32, rate=speed)
                     
                     try:
                         import soxr
@@ -269,6 +286,15 @@ class GenieEngine(TTSPlugin):
     def save_clone(self, name: str, audio_path: str, transcript: Optional[str] = None, **kwargs):
         if not transcript:
             raise ValueError("Genie cloning requires a transcript.")
+        
+        # Demand manual trimming > 15s
+        try:
+            import librosa
+            duration = librosa.get_duration(path=audio_path)
+            if duration > 15.0:
+                raise ValueError(f"Audio is {duration:.1f}s long. Please use the 'Edit' (scissors) button on the audio uploader to trim it under 15s.")
+        except ImportError:
+            pass
         
         target_audio = os.path.join(self.clones_dir, f"{name}.wav")
         target_text = os.path.join(self.clones_dir, f"{name}.txt")

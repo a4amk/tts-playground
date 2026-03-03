@@ -114,7 +114,8 @@ def update_dropdowns(model_id):
                     choices = [True, False]
                 extra_visible.append(gr.update(
                     visible=True, label=ctrl["label"], info=ctrl.get("info"), 
-                    value=ctrl["default"], choices=choices
+                    value=ctrl["default"], minimum=ctrl.get("min", 0.0), 
+                    maximum=ctrl.get("max", 1.0), step=ctrl.get("step", 0.1)
                 ))
             else:
                 extra_visible.append(gr.update(visible=False))
@@ -278,7 +279,7 @@ def create_blocks():
                         extra_header = gr.Markdown("### Engine Specific Settings", visible=False)
                         extra_ctrls = []
                         for i in range(5):
-                            extra_ctrls.append(gr.Dropdown(visible=False, label=f"Extra {i}"))
+                            extra_ctrls.append(gr.Slider(visible=False, label=f"Extra {i}"))
 
                 with gr.Accordion("Advanced Synthesis Controls", open=False):
                     temp_slider = gr.Slider(minimum=0.0, maximum=2.0, value=0.7, step=0.1, label="Temperature (Randomness)")
@@ -346,7 +347,7 @@ def create_blocks():
         ).then(
             fn=update_dropdowns,
             inputs=model_dropdown,
-            outputs=[voice_dropdown, lang_dropdown, variant_dropdown, extra_header] + extra_ctrls
+            outputs=[voice_dropdown, lang_dropdown, variant_dropdown, extra_header, speed_slider, temp_slider, top_k_slider, top_p_slider, rep_pen_slider, cfg_slider, exag_slider, seed_input] + extra_ctrls
         )
         
     return blocks_app

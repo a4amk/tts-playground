@@ -8,6 +8,7 @@ import asyncio
 import librosa
 import sys
 import datetime as dt
+import threading
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 
 from ..interface import TTSPlugin
@@ -64,7 +65,7 @@ class ZipVoiceEngine(TTSPlugin):
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
         self.base_dir = os.path.join(project_root, "models_data/zipvoice")
         self.ref_dir = os.path.join(self.base_dir, "references")
-        self.clones_dir = os.path.join(self.base_dir, "custom_voices", self._id)
+        self.clones_dir = os.path.join(project_root, "custom_voices", "zipvoice")
         
         os.makedirs(self.ref_dir, exist_ok=True)
         os.makedirs(self.clones_dir, exist_ok=True)
@@ -110,8 +111,10 @@ class ZipVoiceEngine(TTSPlugin):
         return {
             "requires_cloning": True,
             "requires_transcript": True,
-            "instruction": "Upload Reference Audio AND exact Reference Text (Transcript)."
+            "instruction": "Upload a 5-10s clear audio sample AND provide the exact transcript for the sample. Use the 'Edit' (scissors) button to trim if the audio exceeds 15s."
         }
+
+
 
     def get_available_voices(self) -> List[str]:
         voices = []
@@ -344,8 +347,8 @@ class ZipVoiceEngine(TTSPlugin):
                             wav = wav * prompt_rms / target_rms
                         
                         wav_np = wav.cpu().numpy().flatten().astype(np.float32)
-                        if speed != 1.0:
-                             wav_np = librosa.effects.time_stretch(wav_np, rate=speed)
+                        # skip per-chunk speed stretch to prevent artifacts
+                             
                              
                         yield wav_np
 
@@ -388,12 +391,23 @@ class ZipVoiceEngine(TTSPlugin):
         loop.close()
         
         if full_audio is not None:
+            if speed != 1.0:
+                import librosa
+                full_audio = librosa.effects.time_stretch(full_audio, rate=speed)
             return 24000, (full_audio * 32767).astype(np.int16)
         return None
 
     def save_clone(self, name: str, audio_path: str, transcript: Optional[str] = None, **kwargs):
         if not transcript:
             raise ValueError("ZipVoice cloning requires a transcript.")
+            
+        try:
+            import librosa
+            duration = librosa.get_duration(path=audio_path)
+            if duration > 15.0:
+                raise ValueError(f"Audio is {duration:.1f}s long. Please use the 'Edit' (scissors) button on the audio uploader to trim it under 15s.")
+        except ImportError:
+            pass
             
         target_audio = os.path.join(self.clones_dir, f"{name}.wav")
         target_txt = os.path.join(self.clones_dir, f"{name}.txt")

@@ -2,7 +2,7 @@
 # 🚀 One-click setup for Genie (GPT-SoVITS)
 set -e
 
-BASE_DIR="/home/ubuntu/my-apps/tts-playground"
+BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MODEL_DATA_DIR="$BASE_DIR/models_data/genie"
 VENV_PYTHON="$BASE_DIR/venv/bin/python3"
 

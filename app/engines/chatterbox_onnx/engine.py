@@ -77,7 +77,7 @@ class ChatterboxONNXEngine(TTSPlugin):
         return {
             "requires_cloning": True,
             "requires_transcript": False,
-            "instruction": "Upload a short (5-10s) clear audio sample of the voice you want to clone."
+            "instruction": "Upload a short (5-10s) clear audio sample of the voice you want to clone. Use the 'Edit' (scissors) button to trim if the audio exceeds 15s."
         }
     def get_standard_controls(self) -> List[Dict[str, Any]]:
         return [
@@ -246,6 +246,9 @@ class ChatterboxONNXEngine(TTSPlugin):
                  
         if audio_chunks:
             full_audio = np.concatenate(audio_chunks)
+            if speed != 1.0:
+                import librosa
+                full_audio = librosa.effects.time_stretch(full_audio, rate=speed)
             return SAMPLE_RATE, (full_audio * 32767).astype(np.int16)
         return None
 
@@ -320,12 +323,16 @@ class ChatterboxONNXEngine(TTSPlugin):
             speaker_features=speaker_features,
         ))[0].squeeze(axis=0)
 
-        if speed != 1.0:
-            wav = librosa.effects.time_stretch(wav, rate=speed)
-            
         return wav
 
     def save_clone(self, name: str, audio_path: str, transcript: Optional[str] = None):
+        try:
+            import librosa
+            duration = librosa.get_duration(path=audio_path)
+            if duration > 15.0:
+                raise ValueError(f"Audio is {duration:.1f}s long. Please use the 'Edit' (scissors) button on the audio uploader to trim it under 15s.")
+        except ImportError:
+            pass
         target_path = os.path.join(self.clones_dir, f"{name}.wav")
         import shutil
         shutil.copy(audio_path, target_path)

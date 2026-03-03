@@ -4,7 +4,7 @@ from huggingface_hub import hf_hub_download
 
 def test():
     # Use kokoro model to compare float values
-    # /home/ubuntu/my-apps/tts-playground/app/engines/kokoro_onnx/model.py
+    # Reference to kokoro model logic
     # Weights for kokoro are in models_data/kokoro
     pass
 

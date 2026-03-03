@@ -4,7 +4,8 @@ import os
 
 def test():
     # Load kokoro model
-    model_path = "/home/ubuntu/my-apps/tts-playground/models_data/kokoro/kokoro-v0_19.onnx"
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+    model_path = os.path.join(project_root, "models_data/kokoro/kokoro-v0_19.onnx")
     if not os.path.exists(model_path):
         print("Kokoro not found at expected path.")
         return

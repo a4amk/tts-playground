@@ -5,6 +5,7 @@ import numpy as np
 import asyncio
 import logging
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
+import scipy
 from piper.voice import PiperVoice
 from piper.config import SynthesisConfig
 from ..interface import TTSPlugin

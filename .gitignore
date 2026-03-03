@@ -39,6 +39,11 @@ custom_voices/
 # IDEs
 .vscode/
 .idea/
+.env
+.env.*
+*.log
+tests/scripts/*.py
+scripts/*.sh.local
 
 # OS
 .DS_Store
