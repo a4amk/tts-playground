@@ -26,10 +26,10 @@ This project provides a unified interface for state-of-the-art TTS models, optim
 ## Quick Start
 
 ### 1. Prerequisites
-Ensure you have Python 3.10+ and `espeak-ng` installed on your system.
+Ensure you have Python 3.10+, `python3-venv`, and `espeak-ng` installed on your system.
 ```bash
 # Linux (Ubuntu/Debian)
-sudo apt-get update && sudo apt-get install -y espeak-ng
+sudo apt-get update && sudo apt-get install -y espeak-ng python3-venv
 ```
 
 ### 2. Installation
@@ -38,14 +38,13 @@ Clone the repository and install dependencies into a virtual environment:
 git clone https://github.com/a4amk/tts-playground.git
 cd tts-playground
 python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+./venv/bin/pip install -r requirements.txt
 ```
 
 ### 3. Run the App
 Start the unified FastAPI + Gradio server:
 ```bash
-python main.py
+./venv/bin/python3 main.py
 ```
 Navigate to `http://localhost:7860` to access the UI.
 
