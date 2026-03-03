@@ -15,8 +15,10 @@ logger = logging.getLogger(__name__)
 # but we expose it here for clarity.
 HF_HUB_OFFLINE = os.getenv("HF_HUB_OFFLINE", "0") == "1"
 
-# HF_HOME is also parsed by huggingface_hub natively.
-HF_HOME = os.getenv("HF_HOME")
+# HF_HOME is also parsed by huggingface_hub natively. 
+# We default it to our local models_data directory for portability.
+HF_HOME = os.getenv("HF_HOME", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models_data", "huggingface")))
+os.environ["HF_HOME"] = HF_HOME
 
 # ------------------------------------------
 # Hardware Configuration
