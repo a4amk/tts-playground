@@ -233,7 +233,7 @@ def create_blocks():
         blocks_app.load(fn=None, js=INJECT_JS)
         
         with gr.Row(elem_classes="header-row"):
-            gr.Markdown("# 🎧 Universal TTS Generator\n*Dynamic Plug-and-Play Architecture*")
+            gr.Markdown("# 🎧 TTS Playground\n*Dynamic Plug-and-Play Architecture*")
                 
         with gr.Row():
             with gr.Column(scale=5):
