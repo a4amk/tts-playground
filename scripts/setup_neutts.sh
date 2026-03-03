@@ -10,5 +10,5 @@ if command -v apt-get &> /dev/null; then
 fi
 
 $VENV_PYTHON -m pip install "neutts[all]" soundfile
-mkdir -p "$BASE_DIR/models_data/neutts/clones"
+mkdir -p "$BASE_DIR/custom_voices/neutts"
 echo "✅ NeuTTS Setup Complete!"

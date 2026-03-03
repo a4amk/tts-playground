@@ -7,9 +7,9 @@ The TTS Playground provides a set of standardized controls that allow for fine-t
 ### 🏃 Synthesis Speed
 - **Parameter**: `speed`
 - **Range**: `0.5` to `2.0` (Default: `1.0`)
-- **Compatibility**: ✅ Streaming | ✅ Batch
+- **Compatibility**: ✅ Batch | ⚠️ Streaming (Optimized for Batch in most models)
 - **Description**: Adjusts the overall pace of the speech. A value of `1.0` is the model's natural speed. Values < `1.0` slow down the speech, while > `1.0` speed it up.
-- **Tip**: Most models maintain high quality between `0.8` and `1.2`. Speed is applied using native model scaling (Piper) or high-quality `librosa` time-stretching (Kokoro, ZipVoice, Genie).
+- **Tip**: Most models maintain high quality between `0.8` and `1.2`. While Piper supports native streaming scale, most other engines (Kokoro, Genie, ZipVoice) apply high-quality time-stretching to the **final batch output** only, to prevent digital artifacts during real-time streaming.
 
 ### 🌡️ Sampling Temperature
 - **Parameter**: `temp`

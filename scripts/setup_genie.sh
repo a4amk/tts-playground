@@ -10,12 +10,15 @@ echo "==============================================="
 echo " Installing Genie (GPT-SoVITS) dependencies    "
 echo "==============================================="
 
-$VENV_PYTHON -m pip install torch numpy scipy librosa transformers huggingface_hub
+$VENV_PYTHON -m pip install torch numpy scipy librosa transformers huggingface_hub genie-tts
 
-mkdir -p "$MODEL_DATA_DIR/GenieData"
-mkdir -p "$MODEL_DATA_DIR/characters"
+mkdir -p "$MODEL_DATA_DIR"
+
+echo "📥 Verifying GenieData..."
+# Use the internal downloader if missing
+$VENV_PYTHON -c "from genie_tts import download_genie_data; import os; os.environ['GENIE_DATA_DIR'] = '$MODEL_DATA_DIR/GenieData'; download_genie_data('$MODEL_DATA_DIR/GenieData')"
 
 echo "==============================================="
 echo " Genie Setup Complete!                         "
-echo " Note: Weights are expected in models_data/genie"
+echo " Weights are located in: $MODEL_DATA_DIR/GenieData"
 echo "==============================================="

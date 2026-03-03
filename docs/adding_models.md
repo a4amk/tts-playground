@@ -48,7 +48,7 @@ class MyEngine(TTSPlugin):
 
 ## Step 3: Auto-Discovery
 
-You no longer need to manually register models! The `PluginManager` will automatically find your `MyEngine` class if it's in the `app/engines/` directory. Just restart the server, and it will appear in the UI.
+You no longer need to manually register models! The `PluginManager` will automatically find your engine class if it's in the `app/engines/` directory and inherits from `TTSPlugin`. Just restart the server, and it will appear in the UI.
 
 ## Step 4: Add a Setup Script (Recommended)
 
@@ -70,27 +70,24 @@ wget -P models_data/my-engine/ https://example.com/weights.bin
 If you have a model in ONNX format (e.g., Piper or a converted Kokoro), you would follow the same pattern:
 
 1.  **Engine Folder**: `app/engines/onnx_piper/`
-2.  **`model.py`**:
+2.  **`engine.py`**:
     ```python
     import onnxruntime as ort
-    class PiperModel:
+    from ..interface import TTSPlugin
+
+    class PiperEngine(TTSPlugin):
         def __init__(self):
+            self._id = "piper_onnx"
+            self._display_name = "Piper ONNX"
             # Load the onnx session once
-            self.session = ort.InferenceSession("model.onnx")
-    piper_model = PiperModel()
-    ```
-3.  **`runtime.py`**:
-    ```python
-    from .model import piper_model
-    class PiperRuntime(BaseTTS):
-        def generate_stream(self, text, voice, speed, **kwargs):
+            self.session = ort.InferenceSession("models_data/piper/model.onnx")
+
+        async def generate_stream(self, text, voice, speed, **kwargs):
             # 1. Convert text to input tensors
-            # 2. run piper_model.session.run(...)
-            # 3. yield audio_chunk
+            # 2. run self.session.run(...)
+            # 3. yield audio_chunk as float32 numpy array
             yield chunk
-    piper_runtime = PiperRuntime()
     ```
-4.  **Register**: In `registry.py`, add `"piper": piper_runtime`.
 
 ---
 
