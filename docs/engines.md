@@ -1,21 +1,21 @@
-# 🚂 Engines Overview
+# Engines Overview
 
 The TTS Playground supports a variety of engines, each with unique strengths. This guide provides a technical overview of each plugin.
 
 | Engine ID | Display Name | Language Support | Zero-Shot Cloning | Latency |
 |-----------|--------------|------------------|-------------------|---------|
-| `kokoro` | Kokoro v1.0 (PyTorch) | English | ❌ No | ⚡ Ultra Low |
-| `kokoro-onnx` | Kokoro v0.19 (ONNX) | English, Japanese | ❌ No | 🚀 Very Low |
-| `chatterbox_onnx`| Chatterbox Turbo | English | ✅ Yes | ⚡ Low |
-| `genie` | Genie (GPT-SoVITS) | EN, JA, ZH | ✅ Yes | 🐢 Medium |
-| `zipvoice` | ZipVoice | English | ✅ Yes | 🚀 Low |
-| `piper` | Piper (VITS) | English (Amy) | ❌ No | ⚡ Ultra Low |
-| `pocket_tts` | Pocket-TTS (Mimi) | English | ❌ No | ⚡ Low |
-| `neutts` | NeuTTS | English | ✅ Yes | ⚡ Low |
+| `kokoro` | Kokoro v1.0 (PyTorch) | English | No | Ultra Low |
+| `kokoro-onnx` | Kokoro v0.19 (ONNX) | English, Japanese | No | Very Low |
+| `chatterbox_onnx`| Chatterbox Turbo | English | Yes | Low |
+| `genie` | Genie (GPT-SoVITS) | EN, JA, ZH | Yes | Medium |
+| `zipvoice` | ZipVoice | English | Yes | Low |
+| `piper` | Piper (VITS) | English (Amy) | No | Ultra Low |
+| `pocket_tts` | Pocket-TTS (Mimi) | English | No | Low |
+| `neutts` | NeuTTS | English | Yes | Low |
 
 ---
 
-## 🎭 Engine Deep-Dives
+## Engine Deep-Dives
 
 ### 1. **Kokoro (PyTorch & ONNX)**
 - **Best For**: High-quality natural narration with minimal CPU/GPU overhead.
@@ -45,7 +45,7 @@ The TTS Playground supports a variety of engines, each with unique strengths. Th
 
 ---
 
-## 📂 Standardized Directories
+## Standardized Directories
 
 - **Weights**: All static weights must reside in `models_data/`.
 - **Custom Voices**: All dynamically saved clones must reside in `custom_voices/<engine_id>/`.

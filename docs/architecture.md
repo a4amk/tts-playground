@@ -1,4 +1,4 @@
-# 🏗️ Architecture Overview
+# Architecture Overview
 
 The **Universal TTS Control Center** is a hybrid **FastAPI + Gradio** stack designed specifically to circumvent the audio buffering limitations found in standard high-level Web Frameworks.
 
@@ -15,7 +15,7 @@ graph TD
     H -->|Clear Cache| E
 ```
 
-## 🛠️ Components Breakdown
+## Components Breakdown
 
 ### 1. **FastAPI & Uvicorn**
 The core process is a **FastAPI** application running on `uvicorn`. This allows us to mount a standard **Gradio** app on the root path (`/`) while exposing raw, high-performance **WebSocket** endpoints (`/ws/stream`) in the background.
@@ -53,7 +53,7 @@ The project implements a **Script-per-Engine** pattern. Every model in `app/engi
 
 ---
 
-## 📈 Metric Collection Logic
+## Metric Collection Logic
 
 Metrics are collected using `performance.now()` in the browser:
 1.  `reqStartTime`: Captured the moment the "Start" button is clicked.

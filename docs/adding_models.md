@@ -1,3 +1,5 @@
+# Adding New Models
+
 The **Universal TTS Control Center** is built for developer speed. Adding a new model is a two-step process that requires zero changes to the UI or the API routing itself. Engines follow a **Model (Assets)** and **Runtime (Inference)** separation pattern.
 
 ---
@@ -65,7 +67,7 @@ wget -P models_data/my-engine/ https://example.com/weights.bin
 
 ---
 
-## 🛠️ Case Study: Adding an ONNX Model
+## Case Study: Adding an ONNX Model
 
 If you have a model in ONNX format (e.g., Piper or a converted Kokoro), you would follow the same pattern:
 
@@ -91,7 +93,7 @@ If you have a model in ONNX format (e.g., Piper or a converted Kokoro), you woul
 
 ---
 
-## ✨ Automated UI Support
+## Automated UI Support
 
 Once registered:
 1.  **Engine Dropdown**: The Gradio UI will automatically detect the new key (`mycustom`) and add it to the "TTS Engine" dropdown.
@@ -100,7 +102,7 @@ Once registered:
 
 ---
 
-## 💡 Pro Tips for Performance
+## Pro Tips for Performance
 
 *   **Yielding Chunks**: Try to yield audio as soon as a single sentence or even a single word is ready (if the model supports it). This keeps **TTFB** ultra-low.
 *   **Audio Depth**: Ensure you are yielding **`Float32`** numpy arrays for the `generate_stream` method. The browser's `AudioContext` expects this bit depth.
