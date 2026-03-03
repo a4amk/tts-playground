@@ -239,7 +239,7 @@ def create_blocks():
             with gr.Column(scale=5):
                 text_input = gr.Textbox(
                     label="Text to Synthesize", lines=12, 
-                    value="I need to present the present to the lead singer, who is currently holding a lead pipe. Don't desert me in the desert; I haven't finished my dessert yet.!"
+                    value="I need to present the present to the lead singer, who is currently holding a lead pipe. Don't desert me in the desert; I haven't finished my dessert yet."
                 )
                 with gr.Accordion("Chunking Rules (Regex Patterns)", open=True):
                     split_choice_input = gr.Dropdown(
