@@ -11,25 +11,15 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------
 # Hugging Face Configuration
 # ------------------------------------------
-# HF_HUB_OFFLINE is parsed by huggingface_hub natively, 
-# but we expose it here for clarity.
-# Set to '1' to force Hugging Face to use localized caching only (offline mode).
-HF_HUB_OFFLINE = os.getenv("HF_HUB_OFFLINE", "0") == "1"
-
 # If LOCALIZE_MODELS is True, all model downloads are directed to 
 # engine-specific folders in models_data/ instead of the global HF cache.
 # This makes the app self-contained and portable.
 LOCALIZE_MODELS = os.getenv("LOCALIZE_MODELS", "True").lower() in ("true", "1", "yes")
 
-# HF_HOME is also parsed by huggingface_hub natively. 
-# We default it to our local models_data directory for portability.
+# HF_HOME is used for secondary libraries (like transformers) that don't
+# allow passing a custom local_dir. We point it to models_data/huggingface.
 HF_HOME = os.getenv("HF_HOME", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models_data", "huggingface")))
 os.environ["HF_HOME"] = HF_HOME
-
-# Globally enforce offline mode if requested
-if HF_HUB_OFFLINE:
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 # ------------------------------------------
 # Hardware Configuration

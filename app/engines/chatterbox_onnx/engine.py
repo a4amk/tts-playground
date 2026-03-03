@@ -9,7 +9,7 @@ from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 from transformers import AutoTokenizer
 from huggingface_hub import hf_hub_download
 from ..interface import TTSPlugin
-from ...config import get_device, HF_HUB_OFFLINE
+from ...config import get_device
 from ...utils import secure_path_join
 
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ class ChatterboxONNXEngine(TTSPlugin):
         filename = f"{name}{'' if dtype == 'fp32' else '_quantized' if dtype == 'q8' else f'_{dtype}'}.onnx"
         from ...config import LOCALIZE_MODELS
         
-        kwargs = {"local_files_only": HF_HUB_OFFLINE}
+        kwargs = {}
         if LOCALIZE_MODELS:
             kwargs["local_dir"] = os.path.join(self.base_dir, "models_data", self.id)
             kwargs["local_dir_use_symlinks"] = False

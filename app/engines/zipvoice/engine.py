@@ -12,7 +12,7 @@ import threading
 from typing import AsyncGenerator, Tuple, Optional, List, Dict, Any
 
 from ..interface import TTSPlugin
-from ...config import get_device, HF_HUB_OFFLINE, ZIPVOICE_USE_ONNX
+from ...config import get_device, ZIPVOICE_USE_ONNX
 from ...utils import secure_path_join
 import onnxruntime as ort
 
@@ -173,7 +173,7 @@ class ZipVoiceEngine(TTSPlugin):
         self.use_onnx = use_onnx
         logger.info(f"loading ZipVoice Engine (Variant={variant}, ONNX={self.use_onnx})...")
         from ...config import LOCALIZE_MODELS
-        kwargs = {"local_files_only": HF_HUB_OFFLINE}
+        kwargs = {}
         if LOCALIZE_MODELS:
             kwargs["local_dir"] = self.base_dir
             kwargs["local_dir_use_symlinks"] = False
