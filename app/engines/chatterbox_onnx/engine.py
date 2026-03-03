@@ -145,7 +145,13 @@ class ChatterboxONNXEngine(TTSPlugin):
 
     def _download_onnx_model(self, name: str, dtype: str = "fp32") -> str:
         filename = f"{name}{'' if dtype == 'fp32' else '_quantized' if dtype == 'q8' else f'_{dtype}'}.onnx"
+        from ...config import LOCALIZE_MODELS
+        
         kwargs = {"local_files_only": HF_HUB_OFFLINE}
+        if LOCALIZE_MODELS:
+            kwargs["local_dir"] = os.path.join(self.base_dir, "models_data", self.id)
+            kwargs["local_dir_use_symlinks"] = False
+
         # Model graph file
         graph = hf_hub_download(MODEL_ID, subfolder="onnx", filename=filename, **kwargs)
         # Weight data file

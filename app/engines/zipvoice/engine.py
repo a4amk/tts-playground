@@ -172,7 +172,11 @@ class ZipVoiceEngine(TTSPlugin):
 
         self.use_onnx = use_onnx
         logger.info(f"loading ZipVoice Engine (Variant={variant}, ONNX={self.use_onnx})...")
+        from ...config import LOCALIZE_MODELS
         kwargs = {"local_files_only": HF_HUB_OFFLINE}
+        if LOCALIZE_MODELS:
+            kwargs["local_dir"] = self.base_dir
+            kwargs["local_dir_use_symlinks"] = False
         
         # Common files
         token_file = hf_hub_download("k2-fsa/ZipVoice", filename=f"{self.model_name}/tokens.txt", **kwargs)

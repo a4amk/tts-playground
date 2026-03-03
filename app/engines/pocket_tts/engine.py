@@ -99,14 +99,18 @@ class PocketTTSEngine(TTSPlugin):
 
     def load(self, variant: Optional[str] = None):
         if self._model is None:
+            from ...config import get_device
+            device = get_device("cpu")
             config_path = self.local_config if os.path.exists(self.local_config) else DEFAULT_VARIANT
-            logger.info(f"Loading Pocket-TTS model from {config_path}...")
+            logger.info(f"Loading Pocket-TTS model from {config_path} on {device}...")
             self._model = TTSModel.load_model(config_path)
             self._model.eval()
-            self._model.to("cpu")
+            self._model.to(device)
 
     def _get_prompt_state(self, voice_key: str):
         self.load()
+        from ...config import get_device
+        device = get_device("cpu")
         if voice_key not in self._cached_prompt_states:
              # 1. Check user clones
              clone_path = os.path.join(self.clones_dir, f"{voice_key}.safetensors")
@@ -119,7 +123,7 @@ class PocketTTSEngine(TTSPlugin):
              
              if os.path.exists(clone_path):
                  if clone_path.endswith(".pt"):
-                     self._cached_prompt_states[voice_key] = torch.load(clone_path, map_location="cpu", weights_only=True)
+                     self._cached_prompt_states[voice_key] = torch.load(clone_path, map_location=device, weights_only=True)
                  else:
                      self._cached_prompt_states[voice_key] = _import_model_state(clone_path)
              else:
